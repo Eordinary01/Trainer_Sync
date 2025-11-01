@@ -1,32 +1,33 @@
 import { useState } from "react";
 import { useNavigate } from 'react-router-dom'; 
-import axios from 'axios'; // ⬅️ IMPORT: API Client
+import axios from 'axios'; // ⬅️ NEW IMPORT
 
-// 💡 Define the backend URL for Authentication
+// The target endpoint from your backend's API routes.
 const API_URL = 'http://localhost:5000/api/auth/login';
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false); // State for loading indicator
+  const [loading, setLoading] = useState(false); 
   const navigate = useNavigate(); 
 
-  const handleSubmit = async (e) => { // ⬅️ Function must be ASYNC
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true); // Start loading
+    setLoading(true); 
 
     try {
-      // 1. POST request to the backend login endpoint
+      // 1. Send data to the backend API (POST request)
       const response = await axios.post(API_URL, { 
         email, 
         password,
       });
 
-      // 2. Extract token and role from the successful response
-      const { token, user } = response.data; // Assuming backend sends { token: "...", user: { role: "..." } }
+      // 2. Extract JWT and role from the successful response
+      // (This assumes the backend sends data in the format: { token: "...", user: { role: "..." } })
+      const { token, user } = response.data;
       const userRole = user.role; 
 
-      // 3. Store the JWT and role in the browser (Security: JWT handles authentication)
+      // 3. Store the token for future authenticated requests (Security: JWT)
       localStorage.setItem('userToken', token);
       localStorage.setItem('userRole', userRole);
 
@@ -38,18 +39,19 @@ export default function Login() {
       }
 
     } catch (error) {
-      // 5. Handle errors (network issues or wrong credentials)
+      // 5. Handle login failures (display message to user)
       console.error("Login Error:", error.response || error.message);
-      alert(`Login Failed: ${error.response?.data?.message || "Check server status and credentials."}`);
+      alert(`Login Failed: ${error.response?.data?.message || "Could not connect to server."}`);
 
     } finally {
-      setLoading(false); // Stop loading
+      setLoading(false); 
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100"> 
       <div className="bg-white p-10 rounded-xl shadow-lg w-full max-w-sm"> 
+        
         <h1 className="text-3xl font-bold text-center mb-8 text-blue-600"> 
           TrainerSync Login
         </h1>
@@ -78,7 +80,7 @@ export default function Login() {
             />
           </div>
 
-          {/* Login Button: Displays loading state */}
+          {/* Login Button: Disabled and changes text when loading */}
           <button
             type="submit"
             disabled={loading} 
