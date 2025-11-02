@@ -1,0 +1,60 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import { connectDB } from './config/database.js';
+import { logger } from './middleware/logger.middleware.js';
+import { errorHandler } from './middleware/errorHandler.middleware.js';
+import { authenticate } from './middleware/auth.middleware.js';
+
+import authRoutes from './routes/auth.routes.js';
+import usersRoutes from './routes/user.routes.js';
+import adminRoutes from './routes/admin.routes.js';
+// import attendanceRoutes from './routes/attendance.routes.js';
+// import leavesRoutes from './routes/leaves.routes.js';
+// import notificationsRoutes from './routes/notifications.routes.js';
+
+const app = express();
+
+// Connect to database - remove await from top level or wrap in async function
+connectDB().then(() => {
+  console.log('Database connected successfully');
+}).catch(err => {
+  console.error('Database connection failed:', err);
+  process.exit(1);
+});
+
+// Middleware
+app.use(helmet());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true,
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(logger);
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ success: true, message: 'Server is running' });
+});
+
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', authenticate, usersRoutes);
+app.use('/api/admin', authenticate, adminRoutes);
+// app.use('/api/attendance', authenticate, attendanceRoutes);
+// app.use('/api/leaves', authenticate, leavesRoutes);
+// app.use('/api/notifications', authenticate, notificationsRoutes);
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+  });
+});
+
+// Error handler (must be last)
+app.use(errorHandler);
+
+export default app;
