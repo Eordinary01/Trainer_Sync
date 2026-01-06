@@ -1,33 +1,35 @@
-import axios from 'axios';
-import { envConfig } from '../config/environment.js';
+import axios from "axios";
 
 export class GeolocationService {
   static async getAddressFromCoordinates(latitude, longitude) {
-    if (!envConfig.GOOGLE_MAPS_API_KEY) {
-      return `${latitude}, ${longitude}`;
-    }
-
     try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json`;
-      const response = await axios.get(url, {
-        params: {
-          latlng: `${latitude},${longitude}`,
-          key: envConfig.GOOGLE_MAPS_API_KEY,
-        },
-      });
+      const response = await axios.get(
+        "https://nominatim.openstreetmap.org/reverse",
+        {
+          params: {
+            lat: latitude,
+            lon: longitude,
+            format: "json",
+          },
+          headers: {
+            "User-Agent": "TrainerSyncApp/1.0 (contact@example.com)",
+          },
+        }
+      );
 
-      if (response.data.results && response.data.results.length > 0) {
-        return response.data.results[0].formatted_address;
+      if (response.data && response.data.display_name) {
+        return response.data.display_name;
       }
+
       return `${latitude}, ${longitude}`;
     } catch (error) {
-      console.error('Geolocation error:', error.message);
+      console.error("Geolocation error:", error.message);
       return `${latitude}, ${longitude}`;
     }
   }
 
   static calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Earth's radius in km
+    const R = 6371; 
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
@@ -40,8 +42,20 @@ export class GeolocationService {
     return R * c;
   }
 
-  static isWithinRadius(userLat, userLon, officeLat, officeLon, radiusKm = 0.5) {
-    const distance = this.calculateDistance(userLat, userLon, officeLat, officeLon);
+  
+  static isWithinRadius(
+    userLat,
+    userLon,
+    officeLat,
+    officeLon,
+    radiusKm = 0.5
+  ) {
+    const distance = this.calculateDistance(
+      userLat,
+      userLon,
+      officeLat,
+      officeLon
+    );
     return distance <= radiusKm;
   }
 }

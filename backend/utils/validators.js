@@ -4,19 +4,19 @@ export class Validators {
     return regex.test(email);
   }
 
-  static validatePassword(password) {
-    const rules = {
-      minLength: password.length >= 8,
-      hasUpperCase: /[A-Z]/.test(password),
-      hasLowerCase: /[a-z]/.test(password),
-      hasNumber: /\d/.test(password),
-      hasSpecialChar: /[!@#$%^&*]/.test(password),
-    };
-    return {
-      isValid: Object.values(rules).every(v => v === true),
-      rules,
-    };
-  }
+    static validatePassword(password) {
+      const rules = {
+        minLength: password.length >= 8,
+        hasUpperCase: /[A-Z]/.test(password),
+        hasLowerCase: /[a-z]/.test(password),
+        hasNumber: /\d/.test(password),
+        hasSpecialChar: /[!@#$%^&*]/.test(password),
+      };
+      return {
+        isValid: Object.values(rules).every(v => v === true),
+        rules,
+      };
+    }
 
   static validatePhoneNumber(phone) {
     return /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/.test(phone);

@@ -2,10 +2,12 @@ import jwt from 'jsonwebtoken';
 import { envConfig } from '../config/environment.js';
 
 export class JWTHelper {
-  static generateToken(userId, role) {
+  // ✅ Updated to include isFirstLogin in payload (default = false)
+  static generateToken(userId, role, isFirstLogin = false) {
     const payload = {
       userId,
       role,
+      isFirstLogin,
       iat: Math.floor(Date.now() / 1000),
     };
     return jwt.sign(payload, envConfig.JWT_SECRET, {

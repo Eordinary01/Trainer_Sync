@@ -1,7 +1,7 @@
-import { AuthService } from '../services/AuthService.js';
-import { EmailService } from '../services/EmailService.js';
-import { Encryption } from '../utils/encryption.js';
-import { envConfig } from '../config/environment.js';
+import { AuthService } from "../services/AuthService.js";
+import { EmailService } from "../services/EmailService.js";
+import { Encryption } from "../utils/encryption.js";
+import { envConfig } from "../config/environment.js";
 
 const authService = new AuthService();
 const emailService = new EmailService();
@@ -10,10 +10,16 @@ export class AuthController {
   async register(req, res, next) {
     try {
       const { username, email, password, profile } = req.body;
-      const user = await authService.register(username, email, password, 'TRAINER', profile);
+      const user = await authService.register(
+        username,
+        email,
+        password,
+        "TRAINER",
+        profile
+      );
       res.status(201).json({
         success: true,
-        message: 'User registered successfully',
+        message: "User registered successfully",
         data: user,
       });
     } catch (error) {
@@ -24,13 +30,16 @@ export class AuthController {
   async login(req, res, next) {
     try {
       const { username, password } = req.body;
+      // console.log("📩 Backend received login:", username);
       const result = await authService.login(username, password);
+      // console.log("✅ Backend result:", result);
       res.status(200).json({
         success: true,
-        message: 'Login successful',
+        message: "Login successful",
         data: result,
       });
     } catch (error) {
+      console.error("❌ Backend Login Error:", error);
       next(error);
     }
   }
@@ -41,7 +50,7 @@ export class AuthController {
       const result = await authService.refreshToken(refreshToken);
       res.status(200).json({
         success: true,
-        message: 'Token refreshed',
+        message: "Token refreshed",
         data: result,
       });
     } catch (error) {
@@ -57,7 +66,7 @@ export class AuthController {
       await emailService.sendPasswordResetEmail(email, resetLink);
       res.status(200).json({
         success: true,
-        message: 'Password reset link sent to email',
+        message: "Password reset link sent to email",
       });
     } catch (error) {
       next(error);
@@ -79,13 +88,44 @@ export class AuthController {
 
   async changePassword(req, res, next) {
     try {
+      console.log("🔄 CHANGE PASSWORD CONTROLLER START ==========");
+      console.log("👤 Authenticated user:", req.user);
+
       const { oldPassword, newPassword } = req.body;
-      const result = await authService.changePassword(req.user.userId, oldPassword, newPassword);
+
+      console.log("📦 Request body received:", {
+        oldPassword: oldPassword ? "***" : "NOT PROVIDED",
+        newPassword: newPassword ? "***" : "NOT PROVIDED",
+      });
+
+      // ✅ FIX: Use req.user.userId instead of req.user._id
+      const userId = req.user.userId;
+
+      console.log("🆔 Using user ID from token:", userId);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "User ID not found in token",
+        });
+      }
+
+      const result = await authService.changePassword(
+        userId,
+        oldPassword,
+        newPassword
+      );
+
+      console.log("✅ Password change successful in controller");
+
       res.status(200).json({
         success: true,
         message: result.message,
       });
+
+      console.log("🔄 CHANGE PASSWORD CONTROLLER END ==========");
     } catch (error) {
+      console.error("❌ CHANGE PASSWORD CONTROLLER ERROR:", error);
       next(error);
     }
   }

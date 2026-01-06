@@ -7,6 +7,7 @@ import { createTrainerValidation, validateRequest } from '../middleware/validato
 const usersRouter = express.Router();
 const userController = new UserController();
 
+// Existing routes...
 usersRouter.post(
   '/',
   authenticate,
@@ -54,6 +55,23 @@ usersRouter.post(
   authenticate,
   authorize('ADMIN', 'HR'),
   (req, res, next) => userController.bulkImport(req, res, next)
+);
+
+// NEW ROUTES FOR DASHBOARD DATA
+// Get users count by role (for dashboard stats)
+usersRouter.get(
+  '/count/by-role',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.getUsersCountByRole(req, res, next)
+);
+
+// Get active trainers count
+usersRouter.get(
+  '/count/active-trainers',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.getActiveTrainersCount(req, res, next)
 );
 
 export default usersRouter;

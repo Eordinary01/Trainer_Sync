@@ -1,4 +1,15 @@
 import { Leave } from '../models/Leave.model.js';
+import User from '../models/User.model.js';
+import mongoose from 'mongoose';
+
+import { Validators } from '../utils/validators.js';
+import {
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+} from '../utils/errorHandler.js';
+
+
 
 export class LeaveService {
   async applyLeave(trainerId, leaveData) {
@@ -56,53 +67,91 @@ export class LeaveService {
   }
 
   async approveLeave(leaveId, adminId, comments = '') {
-    const leave = await Leave.findById(leaveId);
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
+  try {
+    const leave = await Leave.findById(leaveId).session(session);
     if (!leave) {
       throw new NotFoundError('Leave request not found');
     }
 
     if (leave.status !== 'PENDING') {
-      throw new ValidationError('Can only approve pending leave requests');
+      throw new ValidationError(`Can only approve pending leave requests. Current status: ${leave.status}`);
     }
 
-    const trainer = await User.findById(leave.trainerId);
+    const trainer = await User.findById(leave.trainerId).session(session); // ✅ trainerId
     if (!trainer) {
       throw new NotFoundError('Trainer not found');
     }
 
-    // Deduct leave balance
+    // ✅ Use lowercase leaveType for balance key
     const balanceKey = leave.leaveType.toLowerCase();
-    trainer.leaveBalance[balanceKey] -= leave.numberOfDays;
-    await trainer.save();
+    const currentBalance = trainer.leaveBalance[balanceKey] || 0;
+    
+    if (currentBalance < leave.numberOfDays) {
+      throw new ValidationError(`Insufficient ${leave.leaveType} leave balance. Available: ${currentBalance}, Required: ${leave.numberOfDays}`);
+    }
 
-    // Update leave
+    // ✅ Deduct leave balance
+    trainer.leaveBalance[balanceKey] = currentBalance - leave.numberOfDays;
+    await trainer.save({ session });
+
+    // ✅ Update leave
     leave.status = 'APPROVED';
     leave.approvedBy = adminId;
-    leave.approvalDate = new Date();
-    leave.comments = comments;
-    await leave.save();
+    leave.approvedAt = new Date();
+    leave.adminRemarks = comments || '';
+    await leave.save({ session });
 
+    await session.commitTransaction();
+    
+    console.log(`✅ Leave ${leaveId} approved by admin ${adminId}. Balance deducted: ${leave.numberOfDays} ${leave.leaveType} days from trainer ${leave.trainerId}`);
+    
     return leave;
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('Error in approveLeave:', error);
+    throw error;
+  } finally {
+    session.endSession();
   }
+}
 
   async rejectLeave(leaveId, adminId, comments = '') {
-    const leave = await Leave.findById(leaveId);
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
+  try {
+    const leave = await Leave.findById(leaveId).session(session);
     if (!leave) {
       throw new NotFoundError('Leave request not found');
     }
 
     if (leave.status !== 'PENDING') {
-      throw new ValidationError('Can only reject pending leave requests');
+      throw new ValidationError(`Can only reject pending leave requests. Current status: ${leave.status}`);
     }
 
+    // ✅ Update leave
     leave.status = 'REJECTED';
-    leave.approvedBy = adminId;
-    leave.approvalDate = new Date();
-    leave.comments = comments;
-    await leave.save();
+    leave.rejectedBy = adminId;
+    leave.rejectedAt = new Date();
+    leave.adminRemarks = comments || '';
+    await leave.save({ session });
 
+    await session.commitTransaction();
+    
+    console.log(`❌ Leave ${leaveId} rejected by admin ${adminId}`);
+    
     return leave;
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('Error in rejectLeave:', error);
+    throw error;
+  } finally {
+    session.endSession();
   }
+}
 
   async getLeaveBalance(trainerId) {
     const trainer = await User.findById(trainerId);
@@ -127,8 +176,14 @@ export class LeaveService {
     return leaves;
   }
 
-  async getLeaveHistory(trainerId, filters = {}) {
-    const query = { trainerId };
+  async getLeaveHistory(userId, filters = {}, isAdminOrHR = false) {
+    const query = {};
+    
+    // For regular trainers, only show their own leaves
+    // For admin/HR, show all leaves unless a specific trainer is filtered
+    if (!isAdminOrHR || filters.trainerId) {
+      query.trainerId = filters.trainerId || userId;
+    }
 
     if (filters.status) {
       query.status = filters.status;
@@ -150,6 +205,8 @@ export class LeaveService {
     const skip = (page - 1) * limit;
 
     const leaves = await Leave.find(query)
+      .populate('trainerId', 'username profile.firstName profile.lastName email profile.employeeId')
+      .populate('approvedBy', 'username profile.firstName profile.lastName')
       .skip(skip)
       .limit(limit)
       .sort({ appliedOn: -1 });
