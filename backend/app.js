@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -18,54 +19,37 @@ import notificationsRoutes from './routes/notifications.routes.js';
 
 const app = express();
 
-// -------------------- DATABASE --------------------
-connectDB()
-  .then(() => console.log('✅ Database connected successfully'))
-  .catch(err => {
-    console.error('❌ Database connection failed:', err);
-    process.exit(1);
-  });
 
-// -------------------- CORS --------------------
-// Allowed origins: localhost + deployed frontend
-const allowedOrigins = [
-  'http://localhost:5173',
-  process.env.FRONTEND_URL, // make sure this is set on Render
-];
+connectDB().then(() => {
+  console.log('Database connected successfully');
+}).catch(err => {
+  console.error('Database connection failed:', err);
+  process.exit(1);
+});
 
-// CORS middleware
-app.use(cors({
-  origin: (origin, callback) => {
-    // allow server-to-server requests and tools like Postman
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    console.log('❌ Blocked by CORS:', origin);
-    callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
 
-// Handle preflight requests
-app.options('/*', cors());
-
-// -------------------- SECURITY --------------------
+app.use(express.json());
 app.use(helmet());
 
-// -------------------- BODY PARSING --------------------
-app.use(express.json());
+// Apply CORS middleware
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'https://trainer-sync-tau.vercel.app/'
+  ],
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+  credentials: true,
+  optionsSuccessStatus: 204
+}));
 app.use(express.urlencoded({ extended: true }));
-
-// -------------------- LOGGER --------------------
 app.use(logger);
 
-// -------------------- HEALTH CHECK --------------------
+
 app.get('/api/health', (req, res) => {
   res.status(200).json({ success: true, message: 'Server is running' });
 });
 
-// -------------------- ROUTES --------------------
+
 app.use('/api/auth', authRoutes);
 app.use('/api/users', authenticate, usersRoutes);
 app.use('/api/admin', authenticate, adminRoutes);
@@ -73,7 +57,7 @@ app.use('/api/attendance', authenticate, attendanceRoutes);
 app.use('/api/leaves', authenticate, leavesRoutes);
 app.use('/api/notifications', authenticate, notificationsRoutes);
 
-// -------------------- 404 HANDLER --------------------
+
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -81,7 +65,7 @@ app.use((req, res) => {
   });
 });
 
-// -------------------- ERROR HANDLER --------------------
+
 app.use(errorHandler);
 
 export default app;
