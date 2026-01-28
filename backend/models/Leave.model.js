@@ -1,6 +1,6 @@
 // models/Leave.model.js
 import { Schema, model } from "mongoose";
-import { LEAVE_TYPES, LEAVE_STATUS } from "../config/constant.js"; // ✅ Fixed path - remove /config
+import { LEAVE_TYPES, LEAVE_STATUS } from "../config/constant.js"; 
 
 const leaveSchema = new Schema(
   {

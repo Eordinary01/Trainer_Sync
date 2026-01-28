@@ -59,7 +59,7 @@ export const DEFAULT_LEAVE_BALANCE = {
   SICK: 10,
   CASUAL: 12,
   PAID: 20,
-  EMERGENCY: 5, // ✅ ADD THIS if you add EMERGENCY leave type
+  EMERGENCY: 5, 
 };
 
 export const PASSWORD_RULES = {

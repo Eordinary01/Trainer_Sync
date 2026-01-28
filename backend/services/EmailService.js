@@ -1,7 +1,7 @@
-import nodemailer from 'nodemailer';
-import { EmailTemplate } from '../models/EmailTemplate.model.js';
-import { envConfig } from '../config/environment.js';
-import { NotFoundError } from '../utils/errorHandler.js';
+import nodemailer from "nodemailer";
+import { EmailTemplate } from "../models/EmailTemplate.model.js";
+import { envConfig } from "../config/environment.js";
+import { NotFoundError } from "../utils/errorHandler.js";
 
 export class EmailService {
   constructor() {
@@ -9,22 +9,22 @@ export class EmailService {
     this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: process.env.SMTP_PORT || 587,
-      secure: process.env.SMTP_SECURE === 'true',
+      secure: process.env.SMTP_SECURE === "true",
       auth: {
-        user: process.env.SMTP_USER ,
-        pass: process.env.SMTP_PASS ,
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
     });
   }
 
-  async sendEmail(to, subject, html, text = '') {
+  async sendEmail(to, subject, html, text = "") {
     try {
       const mailOptions = {
-        from: envConfig.SENDGRID_FROM_EMAIL,
+        from: envConfig.SMTP_FROM_EMAIL,
         to,
         subject,
         html,
-        text: text || html.replace(/<[^>]*>/g, ''),
+        text: text || html.replace(/<[^>]*>/g, ""),
       };
 
       const result = await this.transporter.sendMail(mailOptions);
@@ -51,15 +51,11 @@ export class EmailService {
       <p>Please log in to the system to review and approve/reject this request.</p>
     `;
 
-    return this.sendEmail(
-      to,
-      `Leave Request - ${trainerName}`,
-      html
-    );
+    return this.sendEmail(to, `Leave Request - ${trainerName}`, html);
   }
 
   async sendLeaveApprovalEmail(to, trainerName, leaveData, approved = true) {
-    const status = approved ? 'Approved' : 'Rejected';
+    const status = approved ? "Approved" : "Rejected";
     const html = `
       <h2>Leave Request ${status}</h2>
       <p>Your leave request has been ${status.toLowerCase()}:</p>
@@ -68,14 +64,132 @@ export class EmailService {
         <li><strong>From Date:</strong> ${new Date(leaveData.fromDate).toDateString()}</li>
         <li><strong>To Date:</strong> ${new Date(leaveData.toDate).toDateString()}</li>
         <li><strong>Duration:</strong> ${leaveData.numberOfDays} days</li>
-        ${leaveData.comments ? `<li><strong>Comments:</strong> ${leaveData.comments}</li>` : ''}
+        ${leaveData.comments ? `<li><strong>Comments:</strong> ${leaveData.comments}</li>` : ""}
       </ul>
     `;
 
+    return this.sendEmail(to, `Leave Request ${status}`, html);
+  }
+
+  async sendClockInNotification(to, trainerName, clockInData) {
+    const html = `
+    <h2>Trainer Clocked In</h2>
+    <p>A trainer has clocked in for work:</p>
+    <ul>
+      <li><strong>Trainer:</strong> ${trainerName}</li>
+      <li><strong>Clock-In Time:</strong> ${new Date(clockInData.clockInTime).toLocaleString()}</li>
+      <li><strong>Location:</strong> ${clockInData.location || "Recorded"}</li>
+      <li><strong>Employee ID:</strong> ${clockInData.employeeId || "N/A"}</li>
+    </ul>
+    <p>You can view real-time attendance on the admin dashboard.</p>
+  `;
+
+    return this.sendEmail(to, `Clock-In: ${trainerName}`, html);
+  }
+
+  async sendClockOutNotification(to, trainerName, clockOutData) {
+    // Format total hours
+    const totalHours = clockOutData.totalWorkingHours || 0;
+    const hours = Math.floor(totalHours);
+    const minutes = Math.round((totalHours - hours) * 60);
+
+    const html = `
+    <h2>Trainer Clocked Out</h2>
+    <p>A trainer has clocked out:</p>
+    <ul>
+      <li><strong>Trainer:</strong> ${trainerName}</li>
+      <li><strong>Date:</strong> ${new Date(clockOutData.clockOutTime).toLocaleDateString()}</li>
+      <li><strong>Clock-In:</strong> ${new Date(clockOutData.clockInTime).toLocaleTimeString()}</li>
+      <li><strong>Clock-Out:</strong> ${new Date(clockOutData.clockOutTime).toLocaleTimeString()}</li>
+      <li><strong>Total Hours:</strong> ${hours}h ${minutes}m</li>
+      <li><strong>Location:</strong> ${clockOutData.location || "Recorded"}</li>
+      <li><strong>Employee ID:</strong> ${clockOutData.employeeId || "N/A"}</li>
+    </ul>
+    <p>Daily attendance summary has been updated.</p>
+  `;
+
+    return this.sendEmail(to, `Clock-Out: ${trainerName}`, html);
+  }
+  async sendAttendanceConfirmation(
+    to,
+    trainerName,
+    attendanceData,
+    isClockIn = true,
+  ) {
+    const action = isClockIn ? "Clocked In" : "Clocked Out";
+    const greeting = isClockIn
+      ? "Have a productive day!"
+      : "Thank you for your work today!";
+
+    // Format hours for clock-out
+    let hoursInfo = "";
+    if (!isClockIn && attendanceData.totalWorkingHours) {
+      const totalHours = attendanceData.totalWorkingHours;
+      const hours = Math.floor(totalHours);
+      const minutes = Math.round((totalHours - hours) * 60);
+      hoursInfo = `<li><strong>Total Hours:</strong> ${hours}h ${minutes}m</li>`;
+    }
+
+    const html = `
+    <h2>${action} Successful</h2>
+    <p>You have successfully ${action.toLowerCase()}:</p>
+    <ul>
+      <li><strong>Time:</strong> ${new Date(isClockIn ? attendanceData.clockInTime : attendanceData.clockOutTime).toLocaleString()}</li>
+      <li><strong>Location:</strong> ${attendanceData.location || "Recorded"}</li>
+      ${hoursInfo}
+    </ul>
+    <p>${greeting}</p>
+  `;
+
+    return this.sendEmail(to, `${action} Confirmation`, html);
+  }
+
+  async sendDailyAttendanceReport(to, reportData) {
+    const {
+      date,
+      totalTrainers,
+      clockedIn,
+      clockedOut,
+      absent,
+      presentPercentage,
+    } = reportData;
+
+    const html = `
+    <h2>Daily Attendance Report</h2>
+    <p><strong>Date:</strong> ${new Date(date).toDateString()}</p>
+    <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+      <tr>
+        <th style="border: 1px solid #ddd; padding: 12px; text-align: left; background-color: #f2f2f2;">Metric</th>
+        <th style="border: 1px solid #ddd; padding: 12px; text-align: left; background-color: #f2f2f2;">Value</th>
+      </tr>
+      <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;"><strong>Total Trainers</strong></td>
+        <td style="border: 1px solid #ddd; padding: 8px;">${totalTrainers}</td>
+      </tr>
+      <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;"><strong>Clocked In Today</strong></td>
+        <td style="border: 1px solid #ddd; padding: 8px;">${clockedIn}</td>
+      </tr>
+      <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;"><strong>Clocked Out Today</strong></td>
+        <td style="border: 1px solid #ddd; padding: 8px;">${clockedOut}</td>
+      </tr>
+      <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;"><strong>Absent</strong></td>
+        <td style="border: 1px solid #ddd; padding: 8px;">${absent}</td>
+      </tr>
+      <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;"><strong>Attendance Rate</strong></td>
+        <td style="border: 1px solid #ddd; padding: 8px;">${presentPercentage}%</td>
+      </tr>
+    </table>
+    <p>This report is automatically generated at the end of each work day.</p>
+  `;
+
     return this.sendEmail(
       to,
-      `Leave Request ${status}`,
-      html
+      `Daily Attendance Report - ${new Date(date).toDateString()}`,
+      html,
     );
   }
 
@@ -92,7 +206,7 @@ export class EmailService {
       <p><a href="${envConfig.FRONTEND_URL}/login">Click here to log in</a></p>
     `;
 
-    return this.sendEmail(to, 'Welcome to TrainerSync', html);
+    return this.sendEmail(to, "Welcome to TrainerSync", html);
   }
 
   async sendPasswordResetEmail(to, resetLink) {
@@ -104,7 +218,7 @@ export class EmailService {
       <p>If you didn't request this, please ignore this email.</p>
     `;
 
-    return this.sendEmail(to, 'Password Reset Request', html);
+    return this.sendEmail(to, "Password Reset Request", html);
   }
 
   async sendDailySummaryEmail(to, summaryData) {
@@ -133,7 +247,7 @@ export class EmailService {
       </table>
     `;
 
-    return this.sendEmail(to, 'Daily Attendance Summary', html);
+    return this.sendEmail(to, "Daily Attendance Summary", html);
   }
 
   async loadTemplate(templateName, variables = {}) {
@@ -150,8 +264,8 @@ export class EmailService {
     let body = template.body;
 
     // Replace variables
-    Object.keys(variables).forEach(key => {
-      const regex = new RegExp(`{{${key}}}`, 'g');
+    Object.keys(variables).forEach((key) => {
+      const regex = new RegExp(`{{${key}}}`, "g");
       subject = subject.replace(regex, variables[key]);
       body = body.replace(regex, variables[key]);
     });

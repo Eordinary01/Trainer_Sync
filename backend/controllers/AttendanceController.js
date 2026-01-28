@@ -1,21 +1,22 @@
 import { AttendanceService } from "../services/AttendanceService.js";
-import { NotificationService } from "../services/NotificationService.js";
+import { EmailService } from "../services/EmailService.js";
+import User from "../models/User.model.js";
 
 export class AttendanceController {
   constructor() {
     this.attendanceService = new AttendanceService();
-    this.notificationService = new NotificationService();
+
+    this.emailService = new EmailService();
   }
 
   async clockIn(req, res, next) {
     try {
-      // ✅ ADDED: Input validation
       const { latitude, longitude } = req.body;
-      
+
       if (!latitude || !longitude) {
         return res.status(400).json({
           success: false,
-          message: "Latitude and longitude are required"
+          message: "Latitude and longitude are required",
         });
       }
 
@@ -24,23 +25,95 @@ export class AttendanceController {
         longitude,
       });
 
-      // 🔔 Create notification (which handles real-time updates internally)
       try {
-        await this.notificationService.createNotification(
-          req.user.userId,
-          "CLOCK_IN",
-          "Clocked In",
-          `You have successfully clocked in at ${result.location?.address || 'your location'}`,
-          {
-            clockInTime: result.clockInTime,
-            location: result.location,
-            attendanceId: result._id
-          }
+        const trainer = await User.findById(req.user.userId).select(
+          "email username profile.firstName profile.lastName profile.employeeId",
         );
-      } catch (notifError) {
-        // ✅ ADDED: Don't fail clock-in if notification fails
-        console.error('Notification creation failed:', notifError.message);
-        // Continue with clock-in response
+
+        const trainerName =
+          trainer?.profile?.firstName && trainer?.profile?.lastName
+            ? `${trainer.profile.firstName} ${trainer.profile.lastName}`
+            : trainer?.username || "Trainer";
+
+        const trainerEmployeeId = trainer?.profile?.employeeId || "N/A";
+
+        // Get all HR and Admin emails
+        const hrAdmins = await User.find({
+          role: { $in: ["HR", "ADMIN"] },
+          status: "ACTIVE",
+        }).select("email profile.firstName profile.lastName");
+
+        console.log(
+          `📧 Sending clock-in notification to ${hrAdmins.length} HR/Admin users`,
+        );
+
+        const clockInTime = new Date(result.clockInTime).toLocaleString(
+          "en-US",
+          {
+            weekday: "short",
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            timeZoneName: "short",
+          },
+        );
+
+        // Get location address if available
+        const locationInfo = result.location?.address
+          ? result.location.address
+          : `Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`;
+
+        // Send email to each HR/Admin
+        for (const admin of hrAdmins) {
+          if (admin.email) {
+            await this.emailService.sendEmail(
+              admin.email,
+              `Clock-In: ${trainerName}`,
+              `
+                <h2>Trainer Clocked In</h2>
+                <p>A trainer has clocked in for work:</p>
+                <ul>
+                  <li><strong>Trainer:</strong> ${trainerName} (ID: ${trainerEmployeeId})</li>
+                  <li><strong>Clock-In Time:</strong> ${clockInTime}</li>
+                  <li><strong>Location:</strong> ${locationInfo}</li>
+                  <li><strong>Status:</strong> Started working</li>
+                </ul>
+                <p>You can view real-time attendance on the admin dashboard.</p>
+              `,
+            );
+            console.log(`📧 Clock-in notification sent to ${admin.email}`);
+          }
+        }
+
+        // Also send confirmation email to trainer
+        if (trainer?.email) {
+          await this.emailService.sendEmail(
+            trainer.email,
+            `Clock-In Confirmation`,
+            `
+              <h2>Clock-In Successful</h2>
+              <p>You have successfully clocked in:</p>
+              <ul>
+                <li><strong>Time:</strong> ${clockInTime}</li>
+                <li><strong>Location:</strong> ${locationInfo}</li>
+                <li><strong>Status:</strong> Active - Remember to clock out when you finish work</li>
+              </ul>
+              <p>Have a productive day!</p>
+            `,
+          );
+          console.log(
+            `📧 Clock-in confirmation sent to trainer: ${trainer.email}`,
+          );
+        }
+      } catch (emailError) {
+        console.error(
+          "Failed to send clock-in email notifications:",
+          emailError,
+        );
+        // Don't fail clock-in if email fails
       }
 
       res.status(200).json({
@@ -55,13 +128,12 @@ export class AttendanceController {
 
   async clockOut(req, res, next) {
     try {
-      // ✅ ADDED: Input validation
       const { latitude, longitude } = req.body;
-      
+
       if (!latitude || !longitude) {
         return res.status(400).json({
           success: false,
-          message: "Latitude and longitude are required"
+          message: "Latitude and longitude are required",
         });
       }
 
@@ -70,23 +142,119 @@ export class AttendanceController {
         longitude,
       });
 
-      // 🔔 Create notification (which handles real-time updates internally)
       try {
-        await this.notificationService.createNotification(
-          req.user.userId,
-          "CLOCK_OUT",
-          "Clocked Out",
-          `You have successfully clocked out. Total working hours: ${result.totalWorkingHours || 0}`,
-          {
-            clockOutTime: result.clockOutTime,
-            totalWorkingHours: result.totalWorkingHours,
-            attendanceId: result._id
-          }
+        const trainer = await User.findById(req.user.userId).select(
+          "email username profile.firstName profile.lastName profile.employeeId",
         );
-      } catch (notifError) {
-        // ✅ ADDED: Don't fail clock-out if notification fails
-        console.error('Notification creation failed:', notifError.message);
-        // Continue with clock-out response
+
+        const trainerName =
+          trainer?.profile?.firstName && trainer?.profile?.lastName
+            ? `${trainer.profile.firstName} ${trainer.profile.lastName}`
+            : trainer?.username || "Trainer";
+
+        const trainerEmployeeId = trainer?.profile?.employeeId || "N/A";
+
+        const hrAdmins = await User.find({
+          role: { $in: ["HR", "ADMIN"] },
+          status: "ACTIVE",
+        }).select("email profile.firstName profile.lastName");
+
+        console.log(
+          `📧 Sending clock-out notification to ${hrAdmins.length} HR/Admin users`,
+        );
+
+        // Format times
+        const clockInTime = new Date(result.clockInTime).toLocaleString(
+          "en-US",
+          {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          },
+        );
+
+        const clockOutTime = new Date(result.clockOutTime).toLocaleString(
+          "en-US",
+          {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          },
+        );
+
+        const clockOutDate = new Date(result.clockOutTime).toLocaleDateString(
+          "en-US",
+          {
+            weekday: "short",
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          },
+        );
+
+        // Get location address
+        const locationInfo = result.location?.address
+          ? result.location.address
+          : `Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`;
+
+        // Format hours
+        const totalHours = result.totalWorkingHours || 0;
+        const hours = Math.floor(totalHours);
+        const minutes = Math.round((totalHours - hours) * 60);
+
+        // Send email to  HR/Admin
+        for (const admin of hrAdmins) {
+          if (admin.email) {
+            await this.emailService.sendEmail(
+              admin.email,
+              `Clock-Out: ${trainerName}`,
+              `
+                <h2>Trainer Clocked Out</h2>
+                <p>A trainer has clocked out:</p>
+                <ul>
+                  <li><strong>Trainer:</strong> ${trainerName} (ID: ${trainerEmployeeId})</li>
+                  <li><strong>Date:</strong> ${clockOutDate}</li>
+                  <li><strong>Clock-In Time:</strong> ${clockInTime}</li>
+                  <li><strong>Clock-Out Time:</strong> ${clockOutTime}</li>
+                  <li><strong>Total Hours:</strong> ${hours}h ${minutes}m</li>
+                  <li><strong>Location:</strong> ${locationInfo}</li>
+                  <li><strong>Status:</strong> Completed for the day</li>
+                </ul>
+                <p>Daily attendance summary has been updated.</p>
+              `,
+            );
+            console.log(`📧 Clock-out notification sent to ${admin.email}`);
+          }
+        }
+
+        // send confirmation email to trainer
+        if (trainer?.email) {
+          await this.emailService.sendEmail(
+            trainer.email,
+            `Clock-Out Confirmation`,
+            `
+              <h2>Clock-Out Successful</h2>
+              <p>You have successfully clocked out:</p>
+              <ul>
+                <li><strong>Date:</strong> ${clockOutDate}</li>
+                <li><strong>Clock-In:</strong> ${clockInTime}</li>
+                <li><strong>Clock-Out:</strong> ${clockOutTime}</li>
+                <li><strong>Total Hours:</strong> ${hours}h ${minutes}m</li>
+                <li><strong>Location:</strong> ${locationInfo}</li>
+              </ul>
+              <p>Thank you for your work today!</p>
+            `,
+          );
+          console.log(
+            `📧 Clock-out confirmation sent to trainer: ${trainer.email}`,
+          );
+        }
+      } catch (emailError) {
+        console.error(
+          "Failed to send clock-out email notifications:",
+          emailError,
+        );
+        // Don't fail clock-out if email fails
       }
 
       res.status(200).json({
@@ -105,19 +273,20 @@ export class AttendanceController {
       if (!(req.user.role === "ADMIN" || req.user.role === "HR")) {
         return res.status(403).json({
           success: false,
-          message: "Only Admin and HR can access clocked-in list"
+          message: "Only Admin and HR can access clocked-in list",
         });
       }
 
-      const clockedInList = await this.attendanceService.getTodayClockedInList();
-      
+      const clockedInList =
+        await this.attendanceService.getTodayClockedInList();
+
       res.status(200).json({
         success: true,
         data: clockedInList,
-        message: 'Today\'s clocked-in list fetched successfully'
+        message: "Today's clocked-in list fetched successfully",
       });
     } catch (error) {
-      console.error('Error fetching today\'s clocked-in list:', error);
+      console.error("Error fetching today's clocked-in list:", error);
       next(error);
     }
   }
@@ -125,15 +294,17 @@ export class AttendanceController {
   async getTodayStatus(req, res, next) {
     try {
       const userId = req.params.trainerId || req.user.userId;
-      
+
       // ✅ ADDED: Authorization check - users can only access their own data unless admin/HR
-      if (userId !== req.user.userId && !(req.user.role === "ADMIN" || req.user.role === "HR")) {
+      if (
+        userId.toString() !== req.user.userId.toString() &&
+        !(req.user.role === "ADMIN" || req.user.role === "HR")
+      ) {
         return res.status(403).json({
           success: false,
-          message: "You can only access your own attendance status"
+          message: "You can only access your own attendance status",
         });
       }
-
       const status = await this.attendanceService.getTodayStatus(userId);
 
       res.status(200).json({
@@ -148,12 +319,15 @@ export class AttendanceController {
   async getAttendanceHistory(req, res, next) {
     try {
       const userId = req.params.trainerId || req.user.userId;
-      
+
       // ✅ ADDED: Authorization check
-      if (userId !== req.user.userId && !(req.user.role === "ADMIN" || req.user.role === "HR")) {
+      if (
+        userId !== req.user.userId &&
+        !(req.user.role === "ADMIN" || req.user.role === "HR")
+      ) {
         return res.status(403).json({
           success: false,
-          message: "You can only access your own attendance history"
+          message: "You can only access your own attendance history",
         });
       }
 
@@ -169,20 +343,20 @@ export class AttendanceController {
       if (filters.fromDate && isNaN(new Date(filters.fromDate))) {
         return res.status(400).json({
           success: false,
-          message: "Invalid fromDate format"
+          message: "Invalid fromDate format",
         });
       }
 
       if (filters.toDate && isNaN(new Date(filters.toDate))) {
         return res.status(400).json({
           success: false,
-          message: "Invalid toDate format"
+          message: "Invalid toDate format",
         });
       }
 
       const result = await this.attendanceService.getAttendanceHistory(
         userId,
-        filters
+        filters,
       );
 
       res.status(200).json({
@@ -197,12 +371,15 @@ export class AttendanceController {
   async getWorkingHours(req, res, next) {
     try {
       const userId = req.params.trainerId || req.user.userId;
-      
+
       // ✅ ADDED: Authorization check
-      if (userId !== req.user.userId && !(req.user.role === "ADMIN" || req.user.role === "HR")) {
+      if (
+        userId !== req.user.userId &&
+        !(req.user.role === "ADMIN" || req.user.role === "HR")
+      ) {
         return res.status(403).json({
           success: false,
-          message: "You can only access your own working hours"
+          message: "You can only access your own working hours",
         });
       }
 
@@ -215,20 +392,20 @@ export class AttendanceController {
       if (filters.fromDate && isNaN(new Date(filters.fromDate))) {
         return res.status(400).json({
           success: false,
-          message: "Invalid fromDate format"
+          message: "Invalid fromDate format",
         });
       }
 
       if (filters.toDate && isNaN(new Date(filters.toDate))) {
         return res.status(400).json({
           success: false,
-          message: "Invalid toDate format"
+          message: "Invalid toDate format",
         });
       }
 
       const result = await this.attendanceService.calculateWorkingHours(
         userId,
-        filters
+        filters,
       );
 
       res.status(200).json({
@@ -246,21 +423,23 @@ export class AttendanceController {
       if (!(req.user.role === "ADMIN" || req.user.role === "HR")) {
         return res.status(403).json({
           success: false,
-          message: "Only Admin and HR can access daily reports"
+          message: "Only Admin and HR can access daily reports",
         });
       }
 
       const date = req.query.date || new Date();
-      
+
       // ✅ ADDED: Validate date format
       if (isNaN(new Date(date))) {
         return res.status(400).json({
           success: false,
-          message: "Invalid date format"
+          message: "Invalid date format",
         });
       }
 
-      const report = await this.attendanceService.getDailyReport(new Date(date));
+      const report = await this.attendanceService.getDailyReport(
+        new Date(date),
+      );
 
       res.status(200).json({
         success: true,
@@ -274,12 +453,15 @@ export class AttendanceController {
   async getWeeklyReport(req, res, next) {
     try {
       const userId = req.params.trainerId || req.user.userId;
-      
+
       // ✅ ADDED: Authorization check
-      if (userId !== req.user.userId && !(req.user.role === "ADMIN" || req.user.role === "HR")) {
+      if (
+        userId !== req.user.userId &&
+        !(req.user.role === "ADMIN" || req.user.role === "HR")
+      ) {
         return res.status(403).json({
           success: false,
-          message: "You can only access your own weekly report"
+          message: "You can only access your own weekly report",
         });
       }
 
@@ -297,12 +479,15 @@ export class AttendanceController {
   async getMonthlyReport(req, res, next) {
     try {
       const userId = req.params.trainerId || req.user.userId;
-      
+
       // ✅ ADDED: Authorization check
-      if (userId !== req.user.userId && !(req.user.role === "ADMIN" || req.user.role === "HR")) {
+      if (
+        userId !== req.user.userId &&
+        !(req.user.role === "ADMIN" || req.user.role === "HR")
+      ) {
         return res.status(403).json({
           success: false,
-          message: "You can only access your own monthly report"
+          message: "You can only access your own monthly report",
         });
       }
 
@@ -323,11 +508,12 @@ export class AttendanceController {
       if (!(req.user.role === "ADMIN" || req.user.role === "HR")) {
         return res.status(403).json({
           success: false,
-          message: "Only Admin and HR can access clocked-in count"
+          message: "Only Admin and HR can access clocked-in count",
         });
       }
 
-      const clockedInList = await this.attendanceService.getTodayClockedInList();
+      const clockedInList =
+        await this.attendanceService.getTodayClockedInList();
       const count = clockedInList.length;
 
       res.json({
@@ -347,7 +533,7 @@ export class AttendanceController {
       if (!(req.user.role === "ADMIN" || req.user.role === "HR")) {
         return res.status(403).json({
           success: false,
-          message: "Only Admin and HR can access attendance rate"
+          message: "Only Admin and HR can access attendance rate",
         });
       }
 

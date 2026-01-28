@@ -64,53 +64,101 @@ export class NotificationService {
   }
 
   // ✅ Create Universal Admin Notification (for all admins/HR)
-  async createUniversalAdminNotification(type, title, message, data = {}) {
-    try {
-      // Create universal notification (no specific userId)
-      const notification = await Notification.create({
-        userId: null,
-        userName: "System",
-        type,
-        title,
-        message,
-        data: {
-          ...data,
-          isUniversalAdminNotification: true,
-          visibleToRoles: ['ADMIN', 'HR']
-        },
-        isRead: false,
-        isUniversal: true,
-        visibleToRoles: ['ADMIN', 'HR']
-      });
-
-      // Get all admin/HR users and send real-time notification to each
+  // services/NotificationService.js - Fix createUniversalAdminNotification method
+async createUniversalAdminNotification(type, title, message, data = {}) {
+  try {
+    // Fetch trainer details if we have trainerId
+    let trainerName = data.userName || "User";
+    let trainerDetails = {};
+    
+    if (data.trainerId || data.userId) {
       try {
-        const adminUsers = await User.find({ 
-          role: { $in: ['ADMIN', 'HR'] } 
-        }).select('_id');
+        const trainer = await User.findById(data.trainerId || data.userId)
+          .select('username email profile.firstName profile.lastName profile.employeeId');
         
-        adminUsers.forEach(admin => {
-          socketService.sendToUser(admin._id.toString(), 'universal_admin_notification', {
-            id: notification._id,
-            type,
-            title,
-            message,
-            data: notification.data,
-            isUniversal: true,
-            createdAt: notification.createdAt,
-            isRead: false
-          });
-        });
-      } catch (socketError) {
-        console.error('Universal admin notification socket error:', socketError);
+        if (trainer) {
+          // Get proper trainer name
+          if (trainer.profile?.firstName && trainer.profile?.lastName) {
+            trainerName = `${trainer.profile.firstName} ${trainer.profile.lastName}`;
+          } else if (trainer.username) {
+            trainerName = trainer.username;
+          }
+          
+          // Add trainer details to data
+          trainerDetails = {
+            trainerId: trainer._id,
+            trainerEmail: trainer.email,
+            trainerEmployeeId: trainer.profile?.employeeId,
+            trainerUsername: trainer.username
+          };
+        }
+      } catch (userError) {
+        console.error('Error fetching trainer details:', userError);
       }
-
-      return notification;
-    } catch (error) {
-      console.error('Universal admin notification creation error:', error);
-      throw error;
     }
+
+    // Create a meaningful message with trainer name
+    let enhancedMessage = message;
+    if (message.includes('User') && trainerName !== 'User') {
+      enhancedMessage = message.replace('User', trainerName);
+    }
+    
+    // If message is still generic, enhance it
+    if (enhancedMessage === message && data.leaveType) {
+      enhancedMessage = `${trainerName} has applied for ${data.leaveType} leave`;
+    }
+
+    console.log(`👑 Creating universal admin notification: ${enhancedMessage}`);
+
+    const notification = await Notification.create({
+      userId: null,
+      userName: "System",
+      type,
+      title,
+      message: enhancedMessage, // Use enhanced message
+      data: {
+        ...data,
+        ...trainerDetails, // Include trainer details
+        userName: trainerName, // Store actual trainer name
+        sourceUser: trainerName, // For frontend display
+        isUniversalAdminNotification: true,
+        visibleToRoles: ['ADMIN', 'HR']
+      },
+      isRead: false,
+      isUniversal: true,
+      visibleToRoles: ['ADMIN', 'HR']
+    });
+
+    // ✅ REAL-TIME: Broadcast to ALL admin/HR users
+    try {
+      const adminUsers = await User.find({ 
+        role: { $in: ['ADMIN', 'HR'] } 
+      }).select('_id');
+      
+      adminUsers.forEach(admin => {
+        socketService.sendToUser(admin._id.toString(), 'universal_admin_notification', {
+          id: notification._id,
+          type,
+          title,
+          message: enhancedMessage,
+          data: notification.data,
+          isUniversal: true,
+          createdAt: notification.createdAt,
+          isRead: false
+        });
+      });
+      
+      console.log(`✅ Universal admin notification sent to ${adminUsers.length} admins/HR`);
+    } catch (socketError) {
+      console.error('Universal admin notification socket error:', socketError);
+    }
+
+    return notification;
+  } catch (error) {
+    console.error('Universal admin notification creation error:', error);
+    throw error;
   }
+}
 
   // ✅ Get Notifications (with role-based filtering)
   async getNotifications(user, page = 1, limit = 20) {

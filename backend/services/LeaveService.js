@@ -12,6 +12,57 @@ import {
 
 
 export class LeaveService {
+  // In LeaveService.js
+async calculateLeaveBalance(userId) {
+  try {
+    // Get current year
+    const currentYear = new Date().getFullYear();
+    const yearStart = new Date(`${currentYear}-01-01`);
+    const yearEnd = new Date(`${currentYear}-12-31`);
+    
+    // Get all leaves for current year
+    const leaves = await Leave.find({
+      trainerId: userId,
+      fromDate: { $gte: yearStart },
+      status: 'APPROVED'
+    });
+    
+    // Default yearly allocations
+    const yearlyAllocation = {
+      casual: 12,
+      sick: 12,
+      paid: 15
+    };
+    
+    // Calculate used leaves
+    const usedLeaves = {
+      casual: 0,
+      sick: 0,
+      paid: 0
+    };
+    
+    leaves.forEach(leave => {
+      const timeDiff = new Date(leave.toDate).getTime() - new Date(leave.fromDate).getTime();
+      const days = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
+      
+      if (usedLeaves[leave.leaveType.toLowerCase()] !== undefined) {
+        usedLeaves[leave.leaveType.toLowerCase()] += days;
+      }
+    });
+    
+    // Calculate balance
+    const balance = {};
+    Object.keys(yearlyAllocation).forEach(type => {
+      balance[type] = yearlyAllocation[type] - usedLeaves[type];
+    });
+    
+    return balance;
+    
+  } catch (error) {
+    console.error('Error calculating leave balance:', error);
+    throw error;
+  }
+}
   async applyLeave(trainerId, leaveData) {
     const { leaveType, fromDate, toDate, reason } = leaveData;
 
@@ -80,12 +131,11 @@ export class LeaveService {
       throw new ValidationError(`Can only approve pending leave requests. Current status: ${leave.status}`);
     }
 
-    const trainer = await User.findById(leave.trainerId).session(session); // ✅ trainerId
+    const trainer = await User.findById(leave.trainerId).session(session);
     if (!trainer) {
       throw new NotFoundError('Trainer not found');
     }
 
-    // ✅ Use lowercase leaveType for balance key
     const balanceKey = leave.leaveType.toLowerCase();
     const currentBalance = trainer.leaveBalance[balanceKey] || 0;
     
@@ -93,11 +143,9 @@ export class LeaveService {
       throw new ValidationError(`Insufficient ${leave.leaveType} leave balance. Available: ${currentBalance}, Required: ${leave.numberOfDays}`);
     }
 
-    // ✅ Deduct leave balance
     trainer.leaveBalance[balanceKey] = currentBalance - leave.numberOfDays;
     await trainer.save({ session });
 
-    // ✅ Update leave
     leave.status = 'APPROVED';
     leave.approvedBy = adminId;
     leave.approvedAt = new Date();
@@ -108,7 +156,11 @@ export class LeaveService {
     
     console.log(`✅ Leave ${leaveId} approved by admin ${adminId}. Balance deducted: ${leave.numberOfDays} ${leave.leaveType} days from trainer ${leave.trainerId}`);
     
-    return leave;
+    // ✅ IMPORTANT: Return populated leave
+    return await Leave.findById(leaveId)
+      .populate('trainerId', 'email username profile.firstName profile.lastName profile.employeeId')
+      .populate('approvedBy', 'username profile.firstName profile.lastName');
+      
   } catch (error) {
     await session.abortTransaction();
     console.error('Error in approveLeave:', error);
@@ -118,7 +170,7 @@ export class LeaveService {
   }
 }
 
-  async rejectLeave(leaveId, adminId, comments = '') {
+async rejectLeave(leaveId, adminId, comments = '') {
   const session = await mongoose.startSession();
   session.startTransaction();
   
@@ -132,7 +184,6 @@ export class LeaveService {
       throw new ValidationError(`Can only reject pending leave requests. Current status: ${leave.status}`);
     }
 
-    // ✅ Update leave
     leave.status = 'REJECTED';
     leave.rejectedBy = adminId;
     leave.rejectedAt = new Date();
@@ -143,7 +194,11 @@ export class LeaveService {
     
     console.log(`❌ Leave ${leaveId} rejected by admin ${adminId}`);
     
-    return leave;
+    // ✅ IMPORTANT: Return populated leave
+    return await Leave.findById(leaveId)
+      .populate('trainerId', 'email username profile.firstName profile.lastName profile.employeeId')
+      .populate('rejectedBy', 'username profile.firstName profile.lastName');
+      
   } catch (error) {
     await session.abortTransaction();
     console.error('Error in rejectLeave:', error);

@@ -459,32 +459,7 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              {/* Sections Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-                {/* Pending Leaves */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-                  <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2 mb-4">
-                    <h2 className="text-base md:text-xl font-bold">Pending Leave Requests</h2>
-                    <button
-                      onClick={handleViewLeaves}
-                      className="text-xs md:text-sm bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
-                    >
-                      View All
-                    </button>
-                  </div>
-                  <div className="space-y-2 md:space-y-3">
-                    {pendingLeaves.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <Calendar className="mx-auto text-gray-400 mb-2" size={32} />
-                        <p className="text-sm">No pending leave requests</p>
-                      </div>
-                    ) : (
-                      pendingLeaves.map((leave) => (
-                        <LeaveItem key={leave._id || leave.id} leave={leave} />
-                      ))
-                    )}
-                  </div>
-                </div>
+              
 
                 {/* Quick Overview */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
@@ -534,6 +509,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
-    </div>
+    
   );
 }

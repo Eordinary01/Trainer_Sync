@@ -66,8 +66,7 @@ export default function Navbar() {
             {user?.role === "ADMIN" && "Administrator Panel"}
             {user?.role === "HR" && "HR Management Panel"}
             {user?.role === "TRAINER" && "Trainer Dashboard"}
-          </div>
-        </div>
+          </div>        </div>
 
         {/* Mobile Menu Button */}
         <button
@@ -252,7 +251,7 @@ export default function Navbar() {
           </div>
 
           {/* Notification Bell */}
-          <NotificationBell />
+          {/* <NotificationBell /> */}
 
           {/* User Profile Dropdown */}
           <div className="relative">

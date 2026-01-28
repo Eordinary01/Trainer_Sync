@@ -1,170 +1,848 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import api from '../../config/api.js';
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import api from "../../config/api.js";
+import {
+  Info,
+  AlertCircle,
+  CheckCircle,
+  Calendar,
+  FileText,
+  XCircle,
+} from "lucide-react";
+
+// Constants for validation rules
+const VALIDATION_RULES = {
+  reason: {
+    minWords: 7,
+    minCharacters: 30,
+    maxCharacters: 500,
+  },
+  dateRange: {
+    maxDays: 30,
+    minAdvanceNotice: 1,
+  },
+};
 
 export default function LeaveApplication() {
   const [leaveData, setLeaveData] = useState({
-    leaveType: 'CASUAL', // Keep as leaveType
-    fromDate: '', // Change back to fromDate
-    toDate: '', // Change back to toDate
-    reason: '',
+    leaveType: "CASUAL",
+    fromDate: "",
+    toDate: "",
+    reason: "",
   });
 
-  const [balance, setBalance] = useState(null);
+  const [balance, setBalance] = useState({ sick: 0, casual: 0, paid: 0 });
   const [loading, setLoading] = useState(false);
   const [balanceLoading, setBalanceLoading] = useState(true);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [touched, setTouched] = useState({
+    fromDate: false,
+    toDate: false,
+    reason: false,
+  });
+  const [existingLeaves, setExistingLeaves] = useState([]);
+  const [leaveCheckLoading, setLeaveCheckLoading] = useState(false);
 
   const navigate = useNavigate();
 
-  // 📌 Fetch Leave Balance (GET /leaves/balance)
+  // Calculate word count
+  const wordCount = useMemo(() => {
+    return leaveData.reason
+      .trim()
+      .split(/\s+/)
+      .filter((word) => word.length > 0).length;
+  }, [leaveData.reason]);
+
+  // Calculate date difference
+  const dateDifference = useMemo(() => {
+    if (!leaveData.fromDate || !leaveData.toDate) return 0;
+    const fromDate = new Date(leaveData.fromDate);
+    const toDate = new Date(leaveData.toDate);
+    return Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
+  }, [leaveData.fromDate, leaveData.toDate]);
+
+  // 📌 Fetch Leave Balance
   useEffect(() => {
-    async function fetchBalance() {
+    const fetchBalance = async () => {
       try {
-        const res = await api.get('/leaves/balance');
-        setBalance(res.data.data);
+        const res = await api.get("/leaves/balance");
+        setBalance(res.data.data || { sick: 0, casual: 0, paid: 0 });
       } catch (err) {
-        console.error(err);
+        console.error("Error fetching balance:", err);
         setBalance({ sick: 0, casual: 0, paid: 0 });
       } finally {
         setBalanceLoading(false);
       }
-    }
-
+    };
     fetchBalance();
   }, []);
 
-  const handleChange = (e) => {
-    setLeaveData({ ...leaveData, [e.target.name]: e.target.value });
-  };
+  // 📌 Fetch user's existing leaves once when component mounts
+  useEffect(() => {
+    const fetchExistingLeaves = async () => {
+      try {
+        setLeaveCheckLoading(true);
+        const response = await api.get("/leaves/history?limit=100");
+        
+        if (response.data.success) {
+          // Handle different response structures
+          let leaves = [];
+          if (response.data.data?.leaves) {
+            leaves = response.data.data.leaves;
+          } else if (Array.isArray(response.data.data)) {
+            leaves = response.data.data;
+          }
+          
+          setExistingLeaves(leaves);
+          console.log("Loaded existing leaves:", leaves.length);
+        }
+      } catch (error) {
+        console.error("Error fetching existing leaves:", error);
+        setExistingLeaves([]);
+      } finally {
+        setLeaveCheckLoading(false);
+      }
+    };
 
-  // 📌 Submit Leave (POST /leaves)
+    fetchExistingLeaves();
+  }, []);
+
+  // Function to check for overlapping leaves
+  const checkForOverlappingLeaves = useCallback((leaves, newFromDate, newToDate) => {
+    if (!newFromDate || !newToDate || leaves.length === 0) return [];
+    
+    const newFrom = new Date(newFromDate);
+    const newTo = new Date(newToDate);
+
+    return leaves.filter((leave) => {
+      // Skip rejected or cancelled leaves
+      if (leave.status === "REJECTED" || leave.status === "CANCELLED") {
+        return false;
+      }
+
+      const leaveFrom = new Date(leave.fromDate);
+      const leaveTo = new Date(leave.toDate);
+
+      // Check for overlap: new range overlaps with existing range
+      return newFrom <= leaveTo && newTo >= leaveFrom;
+    });
+  }, []);
+
+  // Format overlapping leave message
+  const formatOverlappingMessage = useCallback((overlappingLeaves) => {
+    if (overlappingLeaves.length === 0) return "";
+
+    const leave = overlappingLeaves[0];
+    const fromDate = new Date(leave.fromDate).toLocaleDateString("en-US", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+    const toDate = new Date(leave.toDate).toLocaleDateString("en-US", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+    return `You already have a ${leave.status.toLowerCase()} ${leave.leaveType.toLowerCase()} leave from ${fromDate} to ${toDate}. Please select different dates.`;
+  }, []);
+
+  // Real-time validation effect - runs when dates or existing leaves change
+  useEffect(() => {
+    const errors = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Date validations
+    if (touched.fromDate && leaveData.fromDate) {
+      const fromDate = new Date(leaveData.fromDate);
+
+      if (fromDate < today) {
+        errors.fromDate = "From date cannot be in the past";
+      } else {
+        const daysInAdvance = Math.ceil(
+          (fromDate - today) / (1000 * 60 * 60 * 24),
+        );
+        if (daysInAdvance < VALIDATION_RULES.dateRange.minAdvanceNotice) {
+          errors.fromDate = `Please apply at least ${VALIDATION_RULES.dateRange.minAdvanceNotice} day(s) in advance`;
+        }
+      }
+    }
+
+    if (touched.toDate && leaveData.toDate && leaveData.fromDate) {
+      const fromDate = new Date(leaveData.fromDate);
+      const toDate = new Date(leaveData.toDate);
+
+      if (toDate < fromDate) {
+        errors.toDate = "To date cannot be earlier than from date";
+      } else if (dateDifference > VALIDATION_RULES.dateRange.maxDays) {
+        errors.dateRange = `Maximum ${VALIDATION_RULES.dateRange.maxDays} days allowed per application`;
+      }
+      
+      // Check for overlapping leaves in real-time
+      if (fromDate && toDate && existingLeaves.length > 0) {
+        const overlappingLeaves = checkForOverlappingLeaves(
+          existingLeaves,
+          leaveData.fromDate,
+          leaveData.toDate
+        );
+        
+        if (overlappingLeaves.length > 0) {
+          errors.overlapping = formatOverlappingMessage(overlappingLeaves);
+        }
+      }
+    }
+
+    // Balance validation
+    if (leaveData.leaveType && dateDifference > 0) {
+      const leaveTypeKey = leaveData.leaveType.toLowerCase();
+      const availableBalance = balance[leaveTypeKey] || 0;
+      if (dateDifference > availableBalance) {
+        errors.balance = `Insufficient ${leaveData.leaveType} leave balance. Available: ${availableBalance} days, Required: ${dateDifference} days`;
+      }
+    }
+
+    // Reason validation
+    if (touched.reason) {
+      if (!leaveData.reason.trim()) {
+        errors.reason = "Reason is required";
+      } else if (wordCount < VALIDATION_RULES.reason.minWords) {
+        errors.reason = `Minimum ${VALIDATION_RULES.reason.minWords} words required`;
+      } else if (
+        leaveData.reason.length < VALIDATION_RULES.reason.minCharacters
+      ) {
+        errors.reason = `Minimum ${VALIDATION_RULES.reason.minCharacters} characters required`;
+      } else if (
+        leaveData.reason.length > VALIDATION_RULES.reason.maxCharacters
+      ) {
+        errors.reason = `Maximum ${VALIDATION_RULES.reason.maxCharacters} characters allowed`;
+      }
+    }
+
+    setValidationErrors(errors);
+  }, [leaveData, touched, balance, dateDifference, wordCount, existingLeaves, checkForOverlappingLeaves, formatOverlappingMessage]);
+
+  const handleChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setLeaveData((prev) => ({ ...prev, [name]: value }));
+    
+    // Mark as touched when user interacts
+    if (!touched[name]) {
+      setTouched((prev) => ({ ...prev, [name]: true }));
+    }
+  }, [touched]);
+
+  const handleBlur = useCallback((field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  }, []);
+
+  // Handle date change with immediate validation
+  const handleDateChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setLeaveData((prev) => ({ ...prev, [name]: value }));
+    
+    // Immediately mark as touched for validation
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    
+    // If toDate is being changed and fromDate exists, check for overlap immediately
+    if (name === 'toDate' && leaveData.fromDate) {
+      // Force immediate validation check
+      setTimeout(() => {
+        // This will trigger the useEffect validation
+      }, 0);
+    }
+  }, [leaveData.fromDate]);
+
+  // 📌 Submit Leave
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Simple client-side validation
-    if (new Date(leaveData.toDate) < new Date(leaveData.fromDate)) {
-      alert("To Date cannot be earlier than From Date.");
+    // Check for overlapping leaves from real-time validation
+    if (validationErrors.overlapping) {
+      alert("Cannot submit: You already have leave applied for these dates.");
+      return;
+    }
+
+    // Mark all fields as touched to trigger validation
+    setTouched({
+      fromDate: true,
+      toDate: true,
+      reason: true,
+    });
+
+    // Check for validation errors
+    if (Object.keys(validationErrors).length > 0) {
+      alert("Please fix the validation errors before submitting.");
+      return;
+    }
+
+    // Final validation
+    if (!leaveData.fromDate || !leaveData.toDate || !leaveData.reason.trim()) {
+      alert("Please fill in all required fields.");
       return;
     }
 
     setLoading(true);
 
     try {
-      // DEBUG: Log what we're sending
-      console.log('Submitting leave data:', leaveData);
+      console.log("Submitting leave data:", leaveData);
+      const res = await api.post("/leaves", leaveData);
 
-      const res = await api.post('/leaves', leaveData);
-
-      alert('Leave Application Submitted Successfully! HR notified.');
-      navigate('/dashboard');
+      if (res.data.success) {
+        alert("Leave Application Submitted Successfully! HR notified.");
+        navigate("/dashboard");
+      } else {
+        alert(res.data.message || "Leave application failed.");
+      }
     } catch (error) {
-      console.error('Error details:', error.response?.data);
-      alert(error?.response?.data?.message || "Something went wrong!");
+      console.error("Error details:", error);
+
+      // Check if it's a 409 Conflict error (overlapping leaves)
+      if (error.response?.status === 409) {
+        const errorMessage =
+          error.response?.data?.message ||
+          "You already have a leave for these dates.";
+        alert(`Cannot Submit: ${errorMessage}`);
+
+        // Update validation errors to show on screen
+        setValidationErrors((prev) => ({
+          ...prev,
+          overlapping: errorMessage,
+        }));
+      }
+      // Check if it's a 400 error (validation error)
+      else if (error.response?.status === 400) {
+        const errorMessage =
+          error.response?.data?.message ||
+          "Validation failed. Please check your inputs.";
+        alert(`Validation Error: ${errorMessage}`);
+
+        if (errorMessage.includes("balance")) {
+          setValidationErrors((prev) => ({
+            ...prev,
+            balance: errorMessage,
+          }));
+        } else if (errorMessage.includes("date")) {
+          setValidationErrors((prev) => ({
+            ...prev,
+            dateRange: errorMessage,
+          }));
+        }
+      } else {
+        alert(
+          error.response?.data?.message ||
+            "Something went wrong! Please try again.",
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8">
+  // Helper functions
+  const getWordCountStatus = useCallback(() => {
+    if (wordCount === 0) return "empty";
+    if (wordCount < VALIDATION_RULES.reason.minWords) return "insufficient";
+    return "sufficient";
+  }, [wordCount]);
 
+  const isFormValid = useCallback(() => {
+    return (
+      leaveData.fromDate &&
+      leaveData.toDate &&
+      leaveData.reason.trim() &&
+      wordCount >= VALIDATION_RULES.reason.minWords &&
+      leaveData.reason.length >= VALIDATION_RULES.reason.minCharacters &&
+      !validationErrors.overlapping &&
+      !validationErrors.balance &&
+      !validationErrors.dateRange &&
+      !validationErrors.fromDate &&
+      !validationErrors.toDate
+    );
+  }, [leaveData, wordCount, validationErrors]);
+
+  const wordCountStatus = getWordCountStatus();
+  const formValid = isFormValid();
+
+  // Calculate available balance for selected leave type
+  const availableBalance = useMemo(() => {
+    const leaveTypeKey = leaveData.leaveType.toLowerCase();
+    return balance[leaveTypeKey] || 0;
+  }, [leaveData.leaveType, balance]);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
       {/* Back Button */}
       <button
-        onClick={() => navigate('/dashboard')}
-        className="text-blue-600 hover:text-blue-800 mb-6 flex items-center font-medium"
+        onClick={() => navigate("/dashboard")}
+        className="text-blue-600 hover:text-blue-800 mb-6 flex items-center gap-2 font-medium transition-colors"
       >
-        ← Back to Dashboard
+        <span className="text-lg">←</span>
+        Back to Dashboard
       </button>
 
-      <div className="max-w-3xl mx-auto bg-white p-8 rounded-xl shadow-lg">
-        <h2 className="text-3xl font-bold mb-6 text-gray-800">
-          Apply for Leave
-        </h2>
-
-        {/* Leave Balance Widget */}
-        <div className="mb-8 p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded-lg">
-          <h3 className="font-semibold text-orange-700 mb-2">Current Leave Balance:</h3>
-
-          {balanceLoading ? (
-            <p className="text-sm text-gray-500">Loading leave balance...</p>
-          ) : (
-            <p className="text-sm">
-              Sick: <span className="font-bold">{balance?.sick}</span> | 
-              Casual: <span className="font-bold">{balance?.casual}</span> | 
-              Paid: <span className="font-bold">{balance?.paid}</span>
-            </p>
-          )}
+      <div className="max-w-4xl mx-auto">
+        {/* Information Card */}
+        <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="bg-blue-100 p-2 rounded-lg">
+              <Info className="text-blue-600" size={22} />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-blue-800 mb-3 text-lg">
+                Leave Application Guidelines
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <FileText size={14} className="text-blue-500" />
+                  <span>
+                    Minimum{" "}
+                    <strong>{VALIDATION_RULES.reason.minWords} words</strong>{" "}
+                    required
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <Calendar size={14} className="text-blue-500" />
+                  <span>
+                    Maximum{" "}
+                    <strong>{VALIDATION_RULES.dateRange.maxDays} days</strong>{" "}
+                    per application
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <Calendar size={14} className="text-blue-500" />
+                  <span>
+                    Apply at least{" "}
+                    <strong>
+                      {VALIDATION_RULES.dateRange.minAdvanceNotice} day(s)
+                    </strong>{" "}
+                    in advance
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <AlertCircle size={14} className="text-blue-500" />
+                  <span>Leave balance checked automatically</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-
-          {/* Leave Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Leave Type</label>
-            <select
-              name="leaveType"
-              value={leaveData.leaveType}
-              onChange={handleChange}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="CASUAL">Casual Leave</option>
-              <option value="SICK">Sick Leave</option>
-              <option value="PAID">Paid Leave</option>
-            </select>
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6">
+            <h2 className="text-3xl font-bold text-white">Apply for Leave</h2>
+            <p className="text-blue-100 mt-2">
+              Fill in the details below to submit your leave application
+            </p>
           </div>
 
-          {/* From Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
-            <input
-              type="date"
-              name="fromDate"
-              value={leaveData.fromDate}
-              onChange={handleChange}
-              min={new Date().toISOString().split('T')[0]}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
+          <div className="p-6 md:p-8">
+            {/* Leave Balance Widget */}
+            <div className="mb-8 p-5 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl">
+              <h3 className="font-bold text-amber-800 mb-3 flex items-center gap-2">
+                <span className="bg-amber-100 p-1 rounded">
+                  <svg
+                    className="w-5 h-5 text-amber-600"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </span>
+                Current Leave Balance
+              </h3>
+              {balanceLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {["sick", "casual", "paid"].map((type) => (
+                    <div
+                      key={type}
+                      className={`text-center p-4 rounded-lg transition-all duration-300 ${
+                        leaveData.leaveType.toLowerCase() === type
+                          ? "bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 shadow-md"
+                          : "bg-white border border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <div
+                        className={`text-3xl font-bold mb-1 ${
+                          type === "sick"
+                            ? "text-blue-600"
+                            : type === "casual"
+                              ? "text-green-600"
+                              : "text-purple-600"
+                        }`}
+                      >
+                        {balance[type] || 0}
+                      </div>
+                      <div className="text-sm font-medium text-gray-600 uppercase tracking-wider">
+                        {type} Leave
+                      </div>
+                      {leaveData.leaveType.toLowerCase() === type && (
+                        <div className="text-xs text-blue-600 font-medium mt-2">
+                          Available for selection
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-          {/* To Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
-            <input
-              type="date"
-              name="toDate"
-              value={leaveData.toDate}
-              onChange={handleChange}
-              min={leaveData.fromDate || new Date().toISOString().split('T')[0]}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
+            {/* Existing Leaves Warning - Show immediately when overlap detected */}
+            {validationErrors.overlapping && (
+              <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-lg animate-pulse">
+                <div className="flex items-start gap-3 text-red-700">
+                  <XCircle
+                    size={20}
+                    className="text-red-500 flex-shrink-0 mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <div className="font-bold mb-1">
+                      ⚠️ Leave Conflict Detected
+                    </div>
+                    <p>{validationErrors.overlapping}</p>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => navigate("/dashboard/leaves")}
+                        className="text-sm bg-red-600 text-white px-3 py-1.5 rounded hover:bg-red-700 transition-colors inline-flex items-center gap-1"
+                      >
+                        View My Leaves
+                      </button>
+                      <button
+                        onClick={() => {
+                          // Clear dates on click
+                          setLeaveData(prev => ({
+                            ...prev,
+                            fromDate: '',
+                            toDate: ''
+                          }));
+                          setValidationErrors(prev => {
+                            const { overlapping, ...rest } = prev;
+                            return rest;
+                          });
+                        }}
+                        className="text-sm bg-gray-600 text-white px-3 py-1.5 rounded hover:bg-gray-700 transition-colors"
+                      >
+                        Clear Dates
+                      </button>
+                    </div>
+                  </div>
+                  {leaveCheckLoading && (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-500"></div>
+                  )}
+                </div>
+              </div>
+            )}
 
-          {/* Reason */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-            <textarea
-              name="reason"
-              rows="4"
-              value={leaveData.reason}
-              onChange={handleChange}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Briefly describe the reason for your leave."
-              required
-            ></textarea>
-          </div>
+            {/* Balance Warning */}
+            {validationErrors.balance && (
+              <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-3 text-red-700">
+                  <AlertCircle
+                    size={20}
+                    className="text-red-500 flex-shrink-0"
+                  />
+                  <div>
+                    <span className="font-bold">
+                      {validationErrors.balance}
+                    </span>
+                    <div className="text-sm text-red-600 mt-1">
+                      You have {availableBalance} {leaveData.leaveType} days
+                      remaining
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-blue-300"
-          >
-            {loading ? "Submitting..." : "Submit Application"}
-          </button>
-        </form>
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-7">
+              {/* Leave Type */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Leave Type
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {[
+                    { value: "CASUAL", label: "Casual Leave", color: "green" },
+                    { value: "SICK", label: "Sick Leave", color: "blue" },
+                    { value: "PAID", label: "Paid Leave", color: "purple" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setLeaveData((prev) => ({
+                          ...prev,
+                          leaveType: option.value,
+                        }));
+                        setTouched((prev) => ({ ...prev, leaveType: true }));
+                      }}
+                      className={`p-4 rounded-xl border-2 transition-all duration-300 ${
+                        leaveData.leaveType === option.value
+                          ? `border-${option.color}-500 bg-${option.color}-50`
+                          : "border-gray-200 hover:border-gray-300 bg-white"
+                      }`}
+                    >
+                      <div className="text-left">
+                        <div
+                          className={`font-bold text-lg ${
+                            leaveData.leaveType === option.value
+                              ? `text-${option.color}-700`
+                              : "text-gray-700"
+                          }`}
+                        >
+                          {option.label}
+                        </div>
+                        <div className="text-sm text-gray-500 mt-1">
+                          Available: {balance[option.value.toLowerCase()] || 0}{" "}
+                          days
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date Range */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    From Date
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      name="fromDate"
+                      value={leaveData.fromDate}
+                      onChange={handleDateChange}
+                      onBlur={() => handleBlur("fromDate")}
+                      min={new Date().toISOString().split("T")[0]}
+                      className={`w-full p-3.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                        validationErrors.fromDate || validationErrors.overlapping
+                          ? "border-red-300 bg-red-50"
+                          : touched.fromDate && !validationErrors.fromDate
+                            ? "border-green-300 bg-green-50"
+                            : "border-gray-300 hover:border-gray-400"
+                      }`}
+                      required
+                    />
+                    {validationErrors.fromDate && (
+                      <p className="mt-2 text-sm text-red-600 flex items-center gap-2">
+                        <AlertCircle size={14} />
+                        {validationErrors.fromDate}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    To Date
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      name="toDate"
+                      value={leaveData.toDate}
+                      onChange={handleDateChange}
+                      onBlur={() => handleBlur("toDate")}
+                      min={
+                        leaveData.fromDate ||
+                        new Date().toISOString().split("T")[0]
+                      }
+                      className={`w-full p-3.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                        validationErrors.toDate ||
+                        validationErrors.dateRange ||
+                        validationErrors.overlapping
+                          ? "border-red-300 bg-red-50"
+                          : touched.toDate &&
+                              !validationErrors.toDate &&
+                              !validationErrors.dateRange
+                            ? "border-green-300 bg-green-50"
+                            : "border-gray-300 hover:border-gray-400"
+                      }`}
+                      required
+                    />
+                    {(validationErrors.toDate ||
+                      validationErrors.dateRange) && (
+                      <p className="mt-2 text-sm text-red-600 flex items-center gap-2">
+                        <AlertCircle size={14} />
+                        {validationErrors.toDate || validationErrors.dateRange}
+                      </p>
+                    )}
+                    {dateDifference > 0 &&
+                      !validationErrors.dateRange &&
+                      !validationErrors.overlapping && (
+                        <p className="mt-2 text-sm text-green-600 font-medium">
+                          ✅ Total days: {dateDifference} day
+                          {dateDifference !== 1 ? "s" : ""}
+                        </p>
+                      )}
+                    {leaveCheckLoading && leaveData.fromDate && leaveData.toDate && (
+                      <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
+                        Checking for existing leaves...
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Reason */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-bold text-gray-700">
+                    Reason for Leave
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-sm font-bold px-3 py-1 rounded-full ${
+                        wordCountStatus === "sufficient"
+                          ? "bg-green-100 text-green-700"
+                          : wordCountStatus === "insufficient"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-gray-100 text-gray-500"
+                      }`}
+                    >
+                      {wordCount} word{wordCount !== 1 ? "s" : ""}
+                    </span>
+                    {wordCountStatus === "sufficient" && (
+                      <CheckCircle className="text-green-500" size={18} />
+                    )}
+                  </div>
+                </div>
+                <div className="relative">
+                  <textarea
+                    name="reason"
+                    rows="5"
+                    value={leaveData.reason}
+                    onChange={handleChange}
+                    onBlur={() => handleBlur("reason")}
+                    className={`w-full p-4 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none ${
+                      validationErrors.reason
+                        ? "border-red-300 bg-red-50"
+                        : touched.reason && !validationErrors.reason
+                          ? "border-green-300 bg-green-50"
+                          : "border-gray-300 hover:border-gray-400"
+                    }`}
+                    placeholder="Please provide a detailed reason for your leave application..."
+                    required
+                  />
+
+                  {/* Character counter */}
+                  <div className="absolute bottom-3 right-3 text-xs text-gray-400">
+                    {leaveData.reason.length}/
+                    {VALIDATION_RULES.reason.maxCharacters}
+                  </div>
+                </div>
+
+                {/* Validation feedback */}
+                <div className="mt-3">
+                  {validationErrors.reason ? (
+                    <p className="text-sm text-red-600 flex items-center gap-2">
+                      <AlertCircle size={14} />
+                      {validationErrors.reason}
+                    </p>
+                  ) : (
+                    <div className="flex justify-between text-sm">
+                      <div>
+                        {wordCount < VALIDATION_RULES.reason.minWords ? (
+                          <span className="text-amber-600 font-medium">
+                            <span className="inline-block w-2 h-2 bg-amber-500 rounded-full mr-2"></span>
+                            Need {VALIDATION_RULES.reason.minWords - wordCount}{" "}
+                            more words
+                          </span>
+                        ) : (
+                          <span className="text-green-600 font-medium">
+                            <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                            ✓ Minimum requirement met
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-gray-500">
+                        Min. {VALIDATION_RULES.reason.minWords} words,{" "}
+                        {VALIDATION_RULES.reason.minCharacters} chars
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Submit Section */}
+              <div className="pt-6 border-t border-gray-200">
+                <div className="mb-4 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-gray-800">
+                        Ready to Submit
+                      </h4>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {formValid
+                          ? "✅ All requirements met"
+                          : validationErrors.overlapping
+                            ? "❌ Leave conflict detected"
+                            : validationErrors.balance
+                              ? "❌ Insufficient balance"
+                              : "Please complete all fields correctly"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-gray-800">
+                        {dateDifference > 0
+                          ? `${dateDifference} day${dateDifference !== 1 ? "s" : ""}`
+                          : "Select dates"}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Total leave days
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={
+                    loading || !formValid || validationErrors.overlapping
+                  }
+                  className={`w-full py-4 rounded-xl font-bold text-lg transition-all duration-300 ${
+                    loading
+                      ? "bg-blue-400 cursor-wait"
+                      : !formValid || validationErrors.overlapping
+                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                        : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  }`}
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-3">
+                      <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Processing Submission...
+                    </span>
+                  ) : validationErrors.overlapping ? (
+                    "❌ Cannot Submit (Leave Conflict)"
+                  ) : !formValid ? (
+                    "Please Complete All Fields"
+                  ) : (
+                    "✅ Submit Leave Application"
+                  )}
+                </button>
+
+                <p className="mt-4 text-sm text-gray-500 text-center">
+                  By submitting, you confirm that all information provided is
+                  accurate and complete. HR will be notified immediately.
+                </p>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   );

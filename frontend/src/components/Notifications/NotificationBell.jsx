@@ -229,16 +229,37 @@ export const NotificationBell = () => {
   };
 
   // ✅ Enhanced notification display
-  const getNotificationDisplay = (notif) => {
-    let displayMessage = notif.message || '';
-    
-    // For universal notifications, show who triggered it
-    if (notif.isUniversal && notif.data?.sourceUser) {
-      displayMessage += ` (By: ${notif.data.sourceUser})`;
+  // ✅ Enhanced notification display with better formatting
+const getNotificationDisplay = (notif) => {
+  let displayMessage = notif.message || '';
+  
+  // For universal notifications, show formatted information
+  if (notif.isUniversal && notif.data) {
+    // For leave actions, create a cleaner message
+    if (notif.type?.includes('LEAVE_')) {
+      const trainerName = notif.data.trainerName || notif.data.affectedUser || 'Trainer';
+      const action = notif.data.action || (notif.type.includes('APPROVED') ? 'approved' : 'rejected');
+      const leaveType = notif.data.leaveType || '';
+      const actionBy = notif.data.actionBy || notif.data.sourceUser || '';
+      const dateRange = notif.data.dateRange || '';
+      
+      // Build a cleaner message
+      if (dateRange) {
+        displayMessage = `${trainerName}'s ${leaveType} leave (${dateRange}) has been ${action}`;
+        if (actionBy && actionBy !== trainerName) {
+          displayMessage += ` by ${actionBy}`;
+        }
+      } else {
+        displayMessage = `${trainerName}'s ${leaveType} leave has been ${action}`;
+        if (actionBy && actionBy !== trainerName) {
+          displayMessage += ` by ${actionBy}`;
+        }
+      }
     }
-    
-    return displayMessage;
-  };
+  }
+  
+  return displayMessage;
+};
 
   // ✅ Get user badge for notifications
   const getUserBadge = (notif) => {
