@@ -1,31 +1,28 @@
-import { create } from 'zustand';
-import api from '../config/api.js';
+import { create } from "zustand";
+import api from "../config/api.js";
 
-export const useAuthStore = create((set, get) => ({
+export const useAuthStore = create((set) => ({
   user: null,
   token: null,
   isAuthenticated: false,
-  loading: true,
+  loading: false,
   error: null,
 
+  // 🔄 Restore session on refresh
   initialize: () => {
-    // console.log("🔄 Auth Store: Initializing...");
-    const token = localStorage.getItem('token');
-    const user = localStorage.getItem('user');
-    
+    const token = localStorage.getItem("token");
+    const user = localStorage.getItem("user");
+
     if (token && user) {
       try {
-        const userData = JSON.parse(user);
-        set({ 
-          user: userData, 
-          token, 
+        set({
+          token,
+          user: JSON.parse(user),
           isAuthenticated: true,
-          loading: false 
+          loading: false,
         });
-      } catch (error) {
-        console.error('❌ Error parsing stored user data:', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+      } catch {
+        localStorage.clear();
         set({ loading: false });
       }
     } else {
@@ -33,66 +30,88 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // 🔐 LOGIN
   login: async (username, password) => {
     set({ loading: true, error: null });
+
     try {
-      const response = await api.post('/auth/login', { username, password });
-      const responseData = response.data;
+      const res = await api.post("/auth/login", { username, password });
+      const { success, message, data } = res.data;
 
-      if (responseData.success) {
-        const { user, token, isFirstLogin } = responseData.data;
-
-        // Ensure isFirstLogin exists in user object
-        const updatedUser = { ...user, isFirstLogin };
-
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        localStorage.setItem('token', token);
-
-        set({ user: updatedUser, token, isAuthenticated: true, loading: false });
-
-        // Return isFirstLogin explicitly for the component
-        return { success: true, user: updatedUser, isFirstLogin };
-      } else {
-        const errorMsg = responseData.message || 'Login failed';
-        set({ error: errorMsg, loading: false });
-        return { success: false, error: errorMsg };
+      if (!success) {
+        set({ error: message, loading: false });
+        return { success: false, error: message };
       }
-    } catch (error) {
-      const errorMsg = error.response?.data?.message || error.message || 'Login failed';
-      set({ error: errorMsg, loading: false });
-      return { success: false, error: errorMsg };
+
+      const { user, token, isFirstLogin } = data;
+
+      const finalUser = { ...user, isFirstLogin };
+
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(finalUser));
+
+      set({
+        user: finalUser,
+        token,
+        isAuthenticated: true,
+        loading: false,
+      });
+
+      return {
+        success: true,
+        user: finalUser,
+        isFirstLogin,
+      };
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        "Unable to login. Please try again.";
+
+      set({ error: msg, loading: false });
+      return { success: false, error: msg };
     }
   },
 
-  register: async (userData) => {
+  // 📝 REGISTER (KEPT)
+  register: async (payload) => {
     set({ loading: true, error: null });
+
     try {
-      const response = await api.post('/auth/register', userData);
-      const responseData = response.data;
-      if (responseData.success) {
-        set({ loading: false });
-        return { success: true, data: responseData.data };
-      } else {
-        const errorMsg = responseData.message || 'Registration failed';
-        set({ error: errorMsg, loading: false });
-        return { success: false, error: errorMsg };
+      const res = await api.post("/auth/register", payload);
+      const { success, message, data } = res.data;
+
+      if (!success) {
+        set({ error: message, loading: false });
+        return { success: false, error: message };
       }
-    } catch (error) {
-      const errorMsg = error.response?.data?.message || error.message || 'Registration failed';
-      set({ error: errorMsg, loading: false });
-      return { success: false, error: errorMsg };
+
+      set({ loading: false });
+      return { success: true, data };
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        "Registration failed. Try again.";
+
+      set({ error: msg, loading: false });
+      return { success: false, error: msg };
     }
+  },
+
+  // 👤 UPDATE USER (KEPT)
+  setUser: (user) => {
+    localStorage.setItem("user", JSON.stringify(user));
+    set({ user });
   },
 
   logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    set({ user: null, token: null, isAuthenticated: false, loading: false });
-  },
-
-  setUser: (user) => {
-    set({ user });
-    localStorage.setItem('user', JSON.stringify(user));
+    localStorage.clear();
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+    });
   },
 
   clearError: () => set({ error: null }),

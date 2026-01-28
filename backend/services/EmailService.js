@@ -5,7 +5,6 @@ import { NotFoundError } from "../utils/errorHandler.js";
 
 export class EmailService {
   constructor() {
-    // Using nodemailer instead of SendGrid for broader compatibility
     this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: process.env.SMTP_PORT || 587,
@@ -14,10 +13,21 @@ export class EmailService {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      connectionTimeout: 5000,
+      socketTimeout: 5000,
+      pool: {
+        maxConnections: 5,
+        maxMessages: 100,
+        rateDelta: 1000,
+        rateLimit: true,
+      },
+      tls: {
+        rejectUnauthorized: process.env.NODE_ENV === "production" ? true : false,
+      },
     });
   }
 
-  async sendEmail(to, subject, html, text = "") {
+  async sendEmailDirect(to, subject, html, text = "") {
     try {
       const mailOptions = {
         from: envConfig.SMTP_FROM_EMAIL,
@@ -28,12 +38,24 @@ export class EmailService {
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      console.log(`Email sent to ${to}:`, result.messageId);
+      console.log(`✉️ Email sent to ${to}:`, result.messageId);
       return result;
     } catch (error) {
-      console.error(`Failed to send email to ${to}:`, error);
+      console.error(`Failed to send email to ${to}:`, error.message);
       throw error;
     }
+  }
+
+  async sendEmail(to, subject, html, text = "") {
+    // Send email asynchronously without blocking
+    setImmediate(async () => {
+      try {
+        await this.sendEmailDirect(to, subject, html, text);
+      } catch (error) {
+        console.error(`Background email error for ${to}:`, error.message);
+      }
+    });
+    return { async: true, email: to };
   }
 
   async sendLeaveNotification(to, trainerName, leaveData) {
@@ -88,7 +110,6 @@ export class EmailService {
   }
 
   async sendClockOutNotification(to, trainerName, clockOutData) {
-    // Format total hours
     const totalHours = clockOutData.totalWorkingHours || 0;
     const hours = Math.floor(totalHours);
     const minutes = Math.round((totalHours - hours) * 60);
@@ -110,6 +131,7 @@ export class EmailService {
 
     return this.sendEmail(to, `Clock-Out: ${trainerName}`, html);
   }
+
   async sendAttendanceConfirmation(
     to,
     trainerName,
@@ -121,7 +143,6 @@ export class EmailService {
       ? "Have a productive day!"
       : "Thank you for your work today!";
 
-    // Format hours for clock-out
     let hoursInfo = "";
     if (!isClockIn && attendanceData.totalWorkingHours) {
       const totalHours = attendanceData.totalWorkingHours;
@@ -263,7 +284,6 @@ export class EmailService {
     let subject = template.subject;
     let body = template.body;
 
-    // Replace variables
     Object.keys(variables).forEach((key) => {
       const regex = new RegExp(`{{${key}}}`, "g");
       subject = subject.replace(regex, variables[key]);

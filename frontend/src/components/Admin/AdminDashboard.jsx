@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth.js";
 import {
   Users,
@@ -12,12 +13,15 @@ import {
   Menu,
   X,
   ChevronLeft,
+  ArrowRight,
+  Activity,
 } from "lucide-react";
 import api from "../../config/api.js";
 import { formatTime } from "../../utils/dateFormat.js";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [stats, setStats] = useState({
@@ -155,28 +159,28 @@ export default function AdminDashboard() {
       return new Date(date).toLocaleDateString("en-US", {
         day: "numeric",
         month: "short",
-        year: "numeric",
       });
     } catch {
       return "Invalid Date";
     }
   };
 
-  const handleViewLeaves = () => {
-    window.location.href = "/admin/leaves/pending";
+  const navigateToClockedIn = () => {
+    navigate("/admin/clocked-in");
     setSidebarOpen(false);
   };
 
-  const handleViewClockedIn = () => {
-    window.location.href = "/admin/clocked-in";
+  const navigateToPendingLeaves = () => {
+    navigate("/admin/leaves/pending");
     setSidebarOpen(false);
   };
 
   if (user?.role !== "ADMIN" && user?.role !== "HR") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-red-600 font-bold text-xl">❌ Access Denied</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="text-center p-6">
+          <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
+          <p className="text-red-600 font-bold text-xl">Access Denied</p>
           <p className="text-gray-600 mt-2">You don't have permission to access this page.</p>
         </div>
       </div>
@@ -185,21 +189,27 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600 mx-auto"></div>
+          <p className="text-gray-600 mt-4">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
 
-  const StatCard = ({ title, value, sub, icon, iconBg }) => (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 md:p-5">
-      <div className="flex flex-col md:flex-row md:justify-between md:items-start">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs md:text-sm text-gray-600 truncate">{title}</p>
-          <p className="text-xl md:text-2xl font-bold text-gray-800 mt-1 md:mt-2">{value}</p>
-          <p className="text-xs md:text-sm text-gray-600 mt-1 truncate">{sub}</p>
+  const StatCard = ({ title, value, sub, icon, iconBg, onClick }) => (
+    <div
+      className="bg-white rounded-lg shadow hover:shadow-md transition-all border border-gray-100 p-4 sm:p-5 cursor-pointer hover:border-blue-200"
+      onClick={onClick}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <p className="text-xs sm:text-sm text-gray-500 font-medium">{title}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">{value}</p>
+          <p className="text-xs text-gray-500 mt-2">{sub}</p>
         </div>
-        <div className={`${iconBg} p-2 md:p-3 rounded-full mt-2 md:mt-0 md:ml-2 flex-shrink-0`}>
+        <div className={`${iconBg} p-3 rounded-lg flex-shrink-0`}>
           {icon}
         </div>
       </div>
@@ -207,25 +217,25 @@ export default function AdminDashboard() {
   );
 
   const ClockedInUser = ({ user }) => (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 md:p-4 hover:bg-white transition-colors">
-      <div className="flex items-start justify-between mb-2">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-800 text-sm truncate">{user.name}</h3>
-          <p className="text-xs text-gray-500 truncate">ID: {user.employeeId}</p>
+    <div className="bg-white border border-gray-100 rounded-lg p-4 hover:shadow-md transition-all">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-gray-900 text-sm truncate">{user.name}</h3>
+          <p className="text-xs text-gray-500 mt-1">ID: {user.employeeId}</p>
         </div>
-        <div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ml-2">
+        <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 ml-2">
           {formatDuration(user.duration)}
-        </div>
+        </span>
       </div>
-      <div className="space-y-1 text-xs text-gray-600">
-        <div className="flex items-center gap-1 truncate">
-          <Clock size={12} className="flex-shrink-0" />
-          <span className="truncate">Clocked in: {safeFormatTime(user.clockInTime)}</span>
+      <div className="space-y-2 text-xs text-gray-600">
+        <div className="flex items-center gap-2">
+          <Clock size={14} className="text-blue-600 flex-shrink-0" />
+          <span className="truncate">{safeFormatTime(user.clockInTime)}</span>
         </div>
         {user.location && (
-          <div className="flex items-center gap-1 truncate">
-            <MapPin size={12} className="flex-shrink-0" />
-            <span className="truncate">
+          <div className="flex items-center gap-2">
+            <MapPin size={14} className="text-red-600 flex-shrink-0" />
+            <span className="text-xs text-gray-500">
               {user.location.latitude?.toFixed(4)}, {user.location.longitude?.toFixed(4)}
             </span>
           </div>
@@ -234,37 +244,18 @@ export default function AdminDashboard() {
     </div>
   );
 
-  const LeaveItem = ({ leave }) => (
-    <div className="flex flex-col md:flex-row md:items-center md:justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg gap-2">
-      <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-gray-800 text-sm truncate">
-          {leave.trainerId?.profile?.firstName} {leave.trainerId?.profile?.lastName}
-        </h3>
-        <p className="text-xs text-gray-600 truncate">
-          {leave.leaveType} • {formatLeaveDate(leave.fromDate)} to {formatLeaveDate(leave.toDate)}
-        </p>
-        <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-          Reason: {leave.reason?.substring(0, 50)}...
-        </p>
-      </div>
-      <button
-        onClick={() => (window.location.href = `/admin/leaves/${leave._id || leave.id}`)}
-        className="bg-blue-600 text-white px-3 py-2 rounded text-xs hover:bg-blue-700 transition-colors inline-flex items-center gap-1 whitespace-nowrap flex-shrink-0"
-      >
-        <Eye size={14} /> View
-      </button>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="flex flex-col lg:flex-row h-screen">
+      <div className="flex h-screen flex-col lg:flex-row">
         {/* Mobile Header */}
-        <div className="lg:hidden bg-white shadow-md p-4 flex items-center justify-between sticky top-0 z-40">
-          <h1 className="text-lg font-bold text-gray-800">Dashboard</h1>
+        <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 p-4 flex items-center justify-between sticky top-0 z-40">
+          <div>
+            <h1 className="text-lg font-bold text-gray-900">Dashboard</h1>
+            <p className="text-xs text-gray-500">Welcome back</p>
+          </div>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-700"
           >
             {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -280,235 +271,251 @@ export default function AdminDashboard() {
 
         {/* Sidebar */}
         <div
-          className={`fixed lg:static inset-y-0 left-0 bg-white shadow-lg overflow-y-auto z-40 transform transition-all duration-300 ease-in-out ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          } lg:translate-x-0 ${sidebarCollapsed ? "lg:w-20" : "lg:w-80"} w-80 lg:h-screen lg:sticky lg:top-0`}
+          className={`fixed lg:static inset-y-14 left-0 lg:inset-y-0 bg-white border-r border-gray-200 overflow-y-auto z-40 transition-all duration-300 ease-in-out ${
+            sidebarOpen ? "translate-x-0 w-80" : "-translate-x-full"
+          } lg:translate-x-0 ${sidebarCollapsed ? "lg:w-20" : "lg:w-72"} lg:h-screen lg:sticky lg:top-0`}
         >
-          {/* Desktop Collapse Button */}
-          <div className="hidden lg:flex p-4 border-b border-gray-200 justify-between items-center">
-            <h3 className={`font-bold text-gray-800 transition-opacity ${
-              sidebarCollapsed ? "opacity-0 w-0" : "opacity-100"
-            }`}>
-              Menu
+          {/* Sidebar Header */}
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+            <h3 className={`font-bold text-gray-900 transition-opacity ${sidebarCollapsed ? "opacity-0 w-0" : "opacity-100"}`}>
+              Currently Working
             </h3>
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="p-1 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors hidden lg:flex text-gray-700"
               title={sidebarCollapsed ? "Expand" : "Collapse"}
             >
-              <ChevronLeft size={20} className={`transition-transform ${sidebarCollapsed ? "rotate-180" : ""}`} />
+              <ChevronLeft size={18} className={`transition-transform ${sidebarCollapsed ? "rotate-180" : ""}`} />
+            </button>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-2 hover:bg-gray-100 rounded-lg lg:hidden text-gray-700"
+            >
+              <X size={18} />
             </button>
           </div>
 
-          {/* Mobile Close Button */}
-          <div className="lg:hidden p-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="font-bold text-gray-800">Currently Working</h2>
-            <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded">
-              <X size={20} />
-            </button>
-          </div>
-
-          {/* Desktop Header */}
-          <div className="p-4 md:p-6 border-b border-gray-200 hidden lg:block">
-            <div className="flex items-center justify-between">
-              <h2 className={`text-lg font-bold text-gray-800 flex items-center gap-2 transition-opacity ${
-                sidebarCollapsed ? "opacity-0" : "opacity-100"
-              }`}>
-                <Users className="text-green-600 flex-shrink-0" size={20} />
-                <span className="truncate">Currently Working</span>
-              </h2>
-              <span className={`bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex-shrink-0 transition-opacity ${
-                sidebarCollapsed ? "opacity-0 w-0 px-0" : "opacity-100"
-              }`}>
-                {clockedInUsers.length}
-              </span>
-            </div>
-            <p className={`text-xs md:text-sm text-gray-500 mt-2 transition-opacity ${
-              sidebarCollapsed ? "opacity-0 h-0" : "opacity-100"
-            }`}>
-              Real-time clocked-in users
-            </p>
-          </div>
-
-          {/* Desktop Content */}
-          <div className="p-3 md:p-4 hidden lg:block">
+          {/* Sidebar Content */}
+          <div className="p-4">
             {clockedInLoading ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-6 w-6 border-4 border-gray-300 border-t-blue-600"></div>
               </div>
             ) : clockedInUsers.length === 0 ? (
               <div className="text-center py-8">
-                <Users className="mx-auto text-gray-400" size={32} />
-                <p className={`text-gray-500 mt-2 text-xs md:text-sm transition-opacity ${
-                  sidebarCollapsed ? "opacity-0 h-0" : "opacity-100"
-                }`}>
-                  No one is clocked in
+                <Activity className="mx-auto text-gray-300 mb-3" size={32} />
+                <p className={`text-gray-500 text-sm transition-opacity ${sidebarCollapsed ? "opacity-0 h-0" : "opacity-100"}`}>
+                  No one clocked in
                 </p>
               </div>
             ) : (
-              <div className={`space-y-2 md:space-y-3 transition-opacity ${
-                sidebarCollapsed ? "opacity-0 pointer-events-none" : "opacity-100"
-              }`}>
-                {clockedInUsers.map((user) => (
-                  <ClockedInUser key={user.id} user={user} />
+              <div className={`space-y-3 transition-opacity ${sidebarCollapsed ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+                {clockedInUsers.map((u) => (
+                  <div key={u.id} className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-3">
+                    <h4 className="font-semibold text-gray-900 text-sm truncate">{u.name}</h4>
+                    <p className="text-xs text-gray-600 mt-1">
+                      <Clock size={12} className="inline mr-1" />
+                      {safeFormatTime(u.clockInTime)}
+                    </p>
+                    <p className="text-xs font-semibold text-green-700 mt-2">{formatDuration(u.duration)}</p>
+                  </div>
                 ))}
               </div>
             )}
 
             {clockedInUsers.length > 0 && (
               <button
-                onClick={handleViewClockedIn}
-                className={`w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium ${
+                onClick={navigateToClockedIn}
+                className={`w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium inline-flex items-center justify-center gap-1 ${
                   sidebarCollapsed ? "opacity-0 pointer-events-none" : "opacity-100"
                 }`}
               >
-                View Detailed Report
+                View Details
+                <ArrowRight size={14} />
               </button>
             )}
 
-            <div className={`mt-4 text-center transition-opacity ${
-              sidebarCollapsed ? "opacity-0 h-0" : "opacity-100"
-            }`}>
-              <p className="text-xs text-gray-400">🔄 Auto-refreshes every 30s</p>
-            </div>
-          </div>
-
-          {/* Mobile Content */}
-          <div className="p-3 md:p-4 lg:hidden">
-            {clockedInLoading ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-              </div>
-            ) : clockedInUsers.length === 0 ? (
-              <div className="text-center py-8">
-                <Users className="mx-auto text-gray-400" size={32} />
-                <p className="text-gray-500 mt-2 text-xs md:text-sm">No one is clocked in</p>
-              </div>
-            ) : (
-              <div className="space-y-2 md:space-y-3">
-                {clockedInUsers.map((user) => (
-                  <ClockedInUser key={user.id} user={user} />
-                ))}
-              </div>
-            )}
-
-            {clockedInUsers.length > 0 && (
-              <button
-                onClick={handleViewClockedIn}
-                className="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-              >
-                View Detailed Report
-              </button>
-            )}
-
-            <div className="mt-4 text-center">
-              <p className="text-xs text-gray-400">🔄 Auto-refreshes every 30s</p>
-            </div>
+            <p className={`text-center text-xs text-gray-400 mt-4 transition-opacity ${sidebarCollapsed ? "opacity-0 h-0" : "opacity-100"}`}>
+              🔄 Updates every 30s
+            </p>
           </div>
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 w-full overflow-x-hidden overflow-y-auto">
-          <div className="p-3 md:p-6">
-            <div className="max-w-7xl mx-auto">
-              {/* Header */}
-              <div className="mb-4 md:mb-8">
-                <h1 className="text-xl md:text-3xl font-bold text-gray-800">
-                  {user?.role === "ADMIN" ? "Admin Dashboard" : "HR Dashboard"}
-                </h1>
-                <p className="text-sm md:text-base text-gray-600 mt-1 md:mt-2 truncate">
-                  Welcome back, {String(user?.profile?.firstName || "User")}
-                </p>
-                {error && (
-                  <div className="mt-3 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded-lg text-sm">
-                    <AlertCircle size={16} className="inline mr-2" />
-                    {error}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+            {/* Header */}
+            <div className="mb-6 sm:mb-8">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                {user?.role === "ADMIN" ? "Admin Dashboard" : "HR Dashboard"}
+              </h1>
+              <p className="text-sm text-gray-600 mt-2">
+                Welcome, {String(user?.profile?.firstName || "User")}
+              </p>
+              {error && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-sm flex items-start gap-2">
+                  <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+                  {error}
+                </div>
+              )}
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <StatCard
+                title="Total Trainers"
+                value={stats.totalTrainers}
+                sub={`${stats.activeTrainers} active`}
+                icon={<Users className="text-blue-600" size={22} />}
+                iconBg="bg-blue-100"
+              />
+              <StatCard
+                title="Pending Leaves"
+                value={stats.pendingLeaves}
+                sub="Awaiting approval"
+                icon={<Calendar className="text-purple-600" size={22} />}
+                iconBg="bg-purple-100"
+                onClick={navigateToPendingLeaves}
+              />
+              <StatCard
+                title="Clocked In Today"
+                value={stats.clockedInToday}
+                sub={`of ${stats.totalTrainers}`}
+                icon={<Clock className="text-green-600" size={22} />}
+                iconBg="bg-green-100"
+                onClick={navigateToClockedIn}
+              />
+              <StatCard
+                title="Attendance Rate"
+                value={`${stats.attendanceRate}%`}
+                sub="Today's average"
+                icon={<BarChart3 className="text-orange-600" size={22} />}
+                iconBg="bg-orange-100"
+              />
+            </div>
+
+            {/* Main Content Sections */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {/* Clocked In Users */}
+              <div className="lg:col-span-2">
+                <div className="bg-white rounded-lg shadow border border-gray-100">
+                  <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <Activity size={20} className="text-green-600" />
+                      Currently Working
+                    </h2>
+                    <span className="bg-green-100 text-green-700 text-sm font-semibold px-3 py-1 rounded-full">
+                      {clockedInUsers.length}
+                    </span>
                   </div>
-                )}
-              </div>
 
-              {/* Stats Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 lg:gap-6 mb-6 md:mb-8">
-                <StatCard
-                  title="Total Trainers"
-                  value={stats.totalTrainers}
-                  sub={`${stats.activeTrainers} active`}
-                  icon={<Users className="text-blue-600" size={20} />}
-                  iconBg="bg-blue-100"
-                />
-                <StatCard
-                  title="Pending Leaves"
-                  value={stats.pendingLeaves}
-                  sub="Requires attention"
-                  icon={<Calendar className="text-purple-600" size={20} />}
-                  iconBg="bg-purple-100"
-                />
-                <StatCard
-                  title="Clocked In"
-                  value={stats.clockedInToday}
-                  sub={`of ${stats.totalTrainers}`}
-                  icon={<Clock className="text-green-600" size={20} />}
-                  iconBg="bg-green-100"
-                />
-                <StatCard
-                  title="Attendance"
-                  value={`${stats.attendanceRate}%`}
-                  sub="Today"
-                  icon={<BarChart3 className="text-orange-600" size={20} />}
-                  iconBg="bg-orange-100"
-                />
-              </div>
-
-              
-
-                {/* Quick Overview */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-                  <h2 className="text-base md:text-xl font-bold mb-4">Quick Overview</h2>
-                  <div className="space-y-3">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <h3 className="font-semibold text-blue-800 text-sm mb-1">Attendance Summary</h3>
-                      <p className="text-xs md:text-sm text-blue-700">
-                        {stats.clockedInToday} of {stats.totalTrainers} trainers are working ({stats.attendanceRate}%)
-                      </p>
-                    </div>
-                    <div className="p-3 bg-purple-50 rounded-lg">
-                      <h3 className="font-semibold text-purple-800 text-sm mb-1">Leave Management</h3>
-                      <p className="text-xs md:text-sm text-purple-700">
-                        {stats.pendingLeaves} leave requests pending
-                      </p>
-                      {pendingLeaves.length > 0 && (
-                        <button
-                          onClick={handleViewLeaves}
-                          className="mt-2 text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 transition-colors"
-                        >
-                          Manage
-                        </button>
-                      )}
-                    </div>
-                    {user?.role === "ADMIN" && (
-                      <div className="p-3 bg-green-50 rounded-lg">
-                        <h3 className="font-semibold text-green-800 text-sm mb-1">HR Management</h3>
-                        <p className="text-xs md:text-sm text-green-700">{stats.totalHR} HR personnel in system</p>
+                  <div className="p-5">
+                    {clockedInLoading ? (
+                      <div className="flex justify-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-blue-600"></div>
                       </div>
+                    ) : clockedInUsers.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Users className="mx-auto text-gray-300 mb-3" size={40} />
+                        <p className="text-gray-500">No trainers clocked in</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {clockedInUsers.slice(0, 5).map((u) => (
+                          <ClockedInUser key={u.id} user={u} />
+                        ))}
+                      </div>
+                    )}
+
+                    {clockedInUsers.length > 5 && (
+                      <button
+                        onClick={navigateToClockedIn}
+                        className="w-full mt-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-sm font-medium"
+                      >
+                        View All ({clockedInUsers.length})
+                      </button>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Refresh Button */}
-              <div className="mt-6 md:mt-8 flex justify-center">
-                <button
-                  onClick={loadDashboardData}
-                  className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-colors inline-flex items-center gap-2 text-sm md:text-base"
-                >
-                  <RefreshCw size={16} />
-                  Refresh
-                </button>
+              {/* Pending Leaves */}
+              <div>
+                <div className="bg-white rounded-lg shadow border border-gray-100">
+                  <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <Calendar size={20} className="text-purple-600" />
+                      Pending
+                    </h2>
+                    <span className="bg-purple-100 text-purple-700 text-sm font-semibold px-3 py-1 rounded-full">
+                      {stats.pendingLeaves}
+                    </span>
+                  </div>
+
+                  <div className="p-5">
+                    {pendingLeaves.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Calendar className="mx-auto text-gray-300 mb-2" size={32} />
+                        <p className="text-gray-500 text-sm">No pending leaves</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {pendingLeaves.slice(0, 3).map((leave) => (
+                          <div key={leave._id} className="bg-purple-50 border border-purple-100 rounded-lg p-3">
+                            <h4 className="font-semibold text-gray-900 text-sm truncate">
+                              {leave.trainerId?.profile?.firstName} {leave.trainerId?.profile?.lastName}
+                            </h4>
+                            <p className="text-xs text-gray-600 mt-1">{leave.leaveType}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {formatLeaveDate(leave.fromDate)} - {formatLeaveDate(leave.toDate)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {pendingLeaves.length > 0 && (
+                      <button
+                        onClick={navigateToPendingLeaves}
+                        className="w-full mt-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                      >
+                        Manage All
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-5">
+                <h3 className="font-bold text-gray-900 text-sm mb-2">Today's Summary</h3>
+                <p className="text-2xl font-bold text-blue-600">{stats.clockedInToday}/{stats.totalTrainers}</p>
+                <p className="text-xs text-gray-600 mt-1">Trainers working ({stats.attendanceRate}%)</p>
+              </div>
+              {user?.role === "ADMIN" && (
+                <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-5">
+                  <h3 className="font-bold text-gray-900 text-sm mb-2">HR Personnel</h3>
+                  <p className="text-2xl font-bold text-green-600">{stats.totalHR}</p>
+                  <p className="text-xs text-gray-600 mt-1">Active in system</p>
+                </div>
+              )}
+            </div>
+
+            {/* Refresh Button */}
+            <div className="flex justify-center mb-6">
+              <button
+                onClick={loadDashboardData}
+                className="bg-gray-900 text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors inline-flex items-center gap-2 text-sm font-medium"
+              >
+                <RefreshCw size={16} />
+                Refresh
+              </button>
             </div>
           </div>
         </div>
       </div>
-    
+    </div>
   );
 }
