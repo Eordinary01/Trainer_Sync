@@ -13,10 +13,10 @@ export class EmailService {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
-      connectionTimeout: 5000,
-      socketTimeout: 5000,
+      connectionTimeout: parseInt(process.env.SMTP_CONNECTION_TIMEOUT || "5000"),
+      socketTimeout: parseInt(process.env.SMTP_SOCKET_TIMEOUT || "5000"),
       pool: {
-        maxConnections: 5,
+        maxConnections: parseInt(process.env.SMTP_MAX_CONNECTIONS || "5"),
         maxMessages: 100,
         rateDelta: 1000,
         rateLimit: true,
