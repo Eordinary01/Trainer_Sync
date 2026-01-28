@@ -9,7 +9,7 @@ export const useAuthStore = create((set, get) => ({
   error: null,
 
   initialize: () => {
-    console.log("🔄 Auth Store: Initializing...");
+    // console.log("🔄 Auth Store: Initializing...");
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user');
     

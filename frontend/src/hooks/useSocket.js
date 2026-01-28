@@ -21,7 +21,7 @@ export const useSocket = () => {
 
     try {
       // ✅ Use Vite's environment variable format
-      const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8890';
+      const socketUrl = import.meta.env.VITE_SOCKET_URL ;
       
       console.log('🔌 Attempting socket connection to:', socketUrl);
       
