@@ -16,7 +16,8 @@ EventEmitter.defaultMaxListeners = 20;
 // console.log("=============================================\n");
 
 // Extract PORT AFTER logs
-const PORT = envConfig.PORT;
+const PORT = process.env.PORT || envConfig.PORT || 8890;
+
 
 // ✅ Create HTTP server for Socket.IO
 const server = http.createServer(app);
