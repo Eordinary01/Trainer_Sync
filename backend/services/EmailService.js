@@ -1,45 +1,51 @@
-import nodemailer from "nodemailer";
+import axios from "axios";
 import { EmailTemplate } from "../models/EmailTemplate.model.js";
 import { envConfig } from "../config/environment.js";
 import { NotFoundError } from "../utils/errorHandler.js";
 
 export class EmailService {
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT || 587,
-      secure: process.env.SMTP_SECURE === "true",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      connectionTimeout: parseInt(process.env.SMTP_CONNECTION_TIMEOUT || "5000"),
-      socketTimeout: parseInt(process.env.SMTP_SOCKET_TIMEOUT || "5000"),
-      pool: {
-        maxConnections: parseInt(process.env.SMTP_MAX_CONNECTIONS || "5"),
-        maxMessages: 100,
-        rateDelta: 1000,
-        rateLimit: true,
-      },
-      tls: {
-        rejectUnauthorized: process.env.NODE_ENV === "production" ? true : false,
-      },
-    });
+    this.apiKey = process.env.BREVO_API_KEY;
+    this.apiUrl = "https://api.brevo.com/v3/smtp/email";
+    
+    if (!this.apiKey) {
+      console.warn("⚠️ BREVO_API_KEY not set - emails will fail");
+    } else {
+      console.log(`📧 Email Service initialized with Brevo REST API`);
+    }
   }
 
   async sendEmailDirect(to, subject, html, text = "") {
     try {
-      const mailOptions = {
-        from: envConfig.SMTP_FROM_EMAIL,
-        to,
-        subject,
-        html,
-        text: text || html.replace(/<[^>]*>/g, ""),
+      if (!this.apiKey) {
+        throw new Error("BREVO_API_KEY not configured");
+      }
+
+      const payload = {
+        sender: {
+          email: process.env.SMTP_FROM_EMAIL || "synctrainer4@gmail.com",
+          name: "TrainerSync",
+        },
+        to: [
+          {
+            email: to,
+          },
+        ],
+        subject: subject,
+        htmlContent: html,
+        textContent: text || html.replace(/<[^>]*>/g, ""),
       };
 
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log(`✉️ Email sent to ${to}:`, result.messageId);
-      return result;
+      const response = await axios.post(this.apiUrl, payload, {
+        headers: {
+          "api-key": this.apiKey,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      });
+
+      console.log(`✉️ Email sent to ${to}:`, response.data.messageId);
+      return response.data;
     } catch (error) {
       console.error(`Failed to send email to ${to}:`, error.message);
       throw error;
@@ -224,7 +230,7 @@ export class EmailService {
         <li><strong>Temporary Password:</strong> ${tempPassword}</li>
       </ul>
       <p>Please log in and change your password immediately for security reasons.</p>
-      <p><a href="${envConfig.FRONTEND_URL}/login">Click here to log in</a></p>
+      <p><a href="${process.env.FRONTEND_URL || envConfig.FRONTEND_URL}/login">Click here to log in</a></p>
     `;
 
     return this.sendEmail(to, "Welcome to TrainerSync", html);
