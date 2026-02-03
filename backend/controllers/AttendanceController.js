@@ -254,6 +254,70 @@ export class AttendanceController {
     });
   }
 
+  async editAttendance(req, res, next) {
+  try {
+    // Only ADMIN and HR can edit attendance
+    if (!(req.user.role === "ADMIN" || req.user.role === "HR")) {
+      return res.status(403).json({
+        success: false,
+        message: "Only Admin and HR can edit attendance records",
+      });
+    }
+
+    const { attendanceId } = req.params;
+    const { clockInTime, clockOutTime, status, notes } = req.body;
+
+    // Validate required fields
+    if (!attendanceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance ID is required",
+      });
+    }
+
+    if (!clockInTime && !clockOutTime && !status && notes === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one field to update is required",
+      });
+    }
+
+    // Validate date formats if provided
+    if (clockInTime && isNaN(new Date(clockInTime))) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid clockInTime format",
+      });
+    }
+
+    if (clockOutTime && isNaN(new Date(clockOutTime))) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid clockOutTime format",
+      });
+    }
+
+    const result = await this.attendanceService.editAttendance(
+      attendanceId,
+      {
+        clockInTime,
+        clockOutTime,
+        status,
+        notes,
+        modifiedBy: req.user.userId,
+      }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
   async getTodayClockedInList(req, res, next) {
     try {
       if (!(req.user.role === "ADMIN" || req.user.role === "HR")) {

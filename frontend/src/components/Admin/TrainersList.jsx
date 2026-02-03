@@ -12,11 +12,13 @@ import {
   Calendar,
   TrendingUp,
   RefreshCw,
-  Eye, // ✅ ADD EYE ICON
+  Eye,
+  Edit2,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth.js";
 import { formatDate } from "../../utils/dateFormat.js";
 import api from "../../config/api.js";
+import EditTrainerModal from "../Common/EditTrainerModal.jsx";
 
 export default function TrainersList() {
   const { user: currentUser, isAuthenticated } = useAuth();
@@ -27,6 +29,7 @@ export default function TrainersList() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [editingTrainer, setEditingTrainer] = useState(null);
 
   useEffect(() => {
     if (
@@ -37,9 +40,23 @@ export default function TrainersList() {
     }
   }, [isAuthenticated, currentUser]);
 
-  
   const handleViewTrainerDetails = (trainerId) => {
     navigate(`/admin/trainers/${trainerId}`);
+  };
+
+  const handleEditTrainer = (trainer) => {
+    setEditingTrainer(trainer);
+  };
+
+  const handleCloseEditModal = () => {
+    setEditingTrainer(null);
+  };
+
+  const handleTrainerUpdated = (updatedTrainer) => {
+    // Update the trainers list with updated trainer
+    setTrainers(trainers.map(t => t._id === updatedTrainer._id ? { ...t, ...updatedTrainer } : t));
+    // Show success message (you can add toast notification here)
+    console.log("✅ Trainer profile updated successfully");
   };
 
   const fetchTrainersData = async () => {
@@ -48,9 +65,8 @@ export default function TrainersList() {
 
       console.log("🔄 Fetching trainers data using existing routes...");
 
-      
       const [usersResponse, clockedInResponse] = await Promise.all([
-        api.get("/users"), // Your existing users endpoint
+        api.get("/users"), 
         api.get("/attendance/today/clocked-in-list"), 
       ]);
 
@@ -75,7 +91,6 @@ export default function TrainersList() {
         .map((trainer) => {
           // Find today's attendance in clocked-in list
           const todayAttendance = clockedInUsers.find((clockedIn) => {
-            // Check different possible ID fields
             return (
               clockedIn.userId === trainer._id ||
               clockedIn.user?._id === trainer._id ||
@@ -338,8 +353,7 @@ export default function TrainersList() {
         {filteredTrainers.map((trainer) => (
           <div
             key={trainer._id}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer" // ✅ ADD CURSOR POINTER
-            onClick={() => handleViewTrainerDetails(trainer._id)} // ✅ ADD CLICK HANDLER
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
           >
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
@@ -360,21 +374,27 @@ export default function TrainersList() {
                   )}
                 </div>
               </div>
-              {/* ✅ ADD VIEW DETAILS BUTTON */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation(); // Prevent card click event
-                  handleViewTrainerDetails(trainer._id);
-                }}
-                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                title="View Details"
-              >
-                <Eye className="w-4 h-4" />
-              </button>
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleViewTrainerDetails(trainer._id)}
+                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="View Details"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleEditTrainer(trainer)}
+                  className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  title="Edit Profile"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Status Badges */}
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-4 gap-2">
               {getStatusBadge(trainer.status)}
               {getAttendanceBadge(trainer)}
             </div>
@@ -473,6 +493,15 @@ export default function TrainersList() {
               : "No trainers are currently registered in the system"}
           </p>
         </div>
+      )}
+
+      {/* Edit Trainer Modal */}
+      {editingTrainer && (
+        <EditTrainerModal
+          trainer={editingTrainer}
+          onClose={handleCloseEditModal}
+          onSuccess={handleTrainerUpdated}
+        />
       )}
     </div>
   );

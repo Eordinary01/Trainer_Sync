@@ -121,6 +121,76 @@ export class AttendanceService {
     };
   }
 
+  async editAttendance(attendanceId, updates) {
+    const attendance = await Attendance.findById(attendanceId);
+    
+    if (!attendance) {
+      throw new NotFoundError('Attendance record not found');
+    }
+
+    // Validate new times if provided
+    if (updates.clockInTime && updates.clockOutTime) {
+      const clockIn = new Date(updates.clockInTime);
+      const clockOut = new Date(updates.clockOutTime);
+
+      if (clockOut <= clockIn) {
+        throw new ValidationError('Clock-out time must be after clock-in time');
+      }
+    }
+
+    // Update clock-in time if provided
+    if (updates.clockInTime) {
+      attendance.clockInTime = new Date(updates.clockInTime);
+    }
+
+    // Update clock-out time if provided
+    if (updates.clockOutTime) {
+      attendance.clockOutTime = new Date(updates.clockOutTime);
+      attendance.status = ATTENDANCE_STATUS.CLOCKED_OUT;
+
+      // Recalculate working hours
+      if (attendance.clockInTime && attendance.clockOutTime) {
+        attendance.totalWorkingHours = DateUtils.calculateWorkingHours(
+          attendance.clockInTime,
+          attendance.clockOutTime
+        );
+      }
+    }
+
+    // Update location if provided
+    if (updates.clockInLocation) {
+      attendance.clockInLocation = updates.clockInLocation;
+    }
+
+    if (updates.clockOutLocation) {
+      attendance.clockOutLocation = updates.clockOutLocation;
+    }
+
+    // Update status if provided
+    if (updates.status) {
+      attendance.status = updates.status;
+    }
+
+    // Update notes if provided
+    if (updates.notes !== undefined) {
+      attendance.notes = updates.notes;
+    }
+
+    attendance.lastModifiedBy = updates.modifiedBy;
+    attendance.lastModifiedAt = new Date();
+
+    await attendance.save();
+
+    // Populate trainer info before returning
+    await attendance.populate('trainerId', 'username profile.firstName profile.lastName email');
+
+    return {
+      message: 'Attendance record updated successfully',
+      data: attendance,
+    };
+  }
+
+
   async getTodayStatus(trainerId) {
     const today = DateUtils.getStartOfDay();
     const attendance = await Attendance.findOne({

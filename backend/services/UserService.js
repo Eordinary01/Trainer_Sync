@@ -1,263 +1,262 @@
-import { Validators } from "../utils/validators.js";
-import {
-  NotFoundError,
-  ValidationError,
-  ConflictError,
-} from "../utils/errorHandler.js";
-import { DEFAULT_LEAVE_BALANCE } from "../config/constant.js";
 import User from "../models/User.model.js";
+import { ValidationError, NotFoundError, ConflictError } from "../utils/errorHandler.js";
 
 export class UserService {
   async createTrainer(trainerData) {
-    const { username, email, profile, reportingManager, password } = trainerData;
-
-    console.log('🔍 Validating trainer data...');
-
-    // ✅ Validate email
-    if (!Validators.validateEmail(email)) {
-      throw new ValidationError("Invalid email format");
-    }
-
-    // ✅ Validate required profile fields
-    if (!profile?.firstName || !profile?.lastName || !profile?.phone) {
-      throw new ValidationError("First name, last name, and phone are required in profile");
-    }
-
-    // ✅ Check if email/username already exists
-    const existingUser = await User.findOne({
-      $or: [{ email }, { username }],
-    });
-    if (existingUser) {
-      throw new ConflictError("Email or username already exists");
-    }
-
-    // ✅ Check if employee ID is unique
-    if (profile?.employeeId) {
-      const existingTrainer = await User.findOne({
-        "profile.employeeId": profile.employeeId,
-      });
-      if (existingTrainer) {
-        throw new ConflictError("Employee ID already exists");
-      }
-    }
-
-    // ✅ Validate reporting manager
-    if (reportingManager) {
-      const manager = await User.findById(reportingManager);
-      if (!manager) throw new NotFoundError("Reporting manager not found");
-    }
-
-    console.log('👤 Creating trainer user object...');
-    // ✅ Create trainer with all required fields
-    const trainer = new User({
-      username,
-      email,
-      password, // This will be hashed by the pre-save hook
-      role: "TRAINER",
-      profile: {
-        firstName: profile.firstName,
-        lastName: profile.lastName,
-        phone: profile.phone,
-        joiningDate: profile.joiningDate || new Date(),
-        employeeId: profile.employeeId, // Will be auto-generated if not provided
-        ...profile // Include any other profile fields
-      },
-      leaveBalance: DEFAULT_LEAVE_BALANCE,
-      reportingManager: reportingManager || null,
-      status: 'ACTIVE'
-    });
-
-    console.log('💾 Saving trainer to database...');
     try {
+      // Check if username already exists
+      const existingUser = await User.findOne({ username: trainerData.username });
+      if (existingUser) {
+        throw new ConflictError("Username already exists");
+      }
+
+      // Check if email already exists
+      const existingEmail = await User.findOne({ email: trainerData.email });
+      if (existingEmail) {
+        throw new ConflictError("Email already exists");
+      }
+
+      const trainer = new User(trainerData);
       await trainer.save();
-      console.log('✅ Trainer saved successfully, password hashed:', trainer.password?.substring(0, 20) + '...');
-    } catch (saveError) {
-      console.error('❌ Save error details:', saveError);
-      throw saveError;
+      return trainer;
+    } catch (error) {
+      throw error;
     }
-
-    if (reportingManager) {
-      await User.findByIdAndUpdate(reportingManager, {
-        $addToSet: { subordinates: trainer._id },
-      });
-    }
-
-    return trainer.toJSON();
   }
-
 
   async getUserProfile(userId) {
-    const user = await User.findById(userId)
-      .populate(
-        "reportingManager",
-        "username profile.firstName profile.lastName email"
-      )
-      .populate(
-        "subordinates",
-        "username profile.firstName profile.lastName email role"
-      )
-      .select("-password");
-
-    if (!user) throw new NotFoundError("User not found");
-    return user.toJSON();
+    const user = await User.findById(userId).select("-password");
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+    return user;
   }
 
-  async updateTrainerProfile(trainerId, updateData) {
-    const trainer = await User.findById(trainerId);
-    if (!trainer) throw new NotFoundError("Trainer not found");
+  async updateTrainerProfile(userId, updates) {
+    try {
+      const user = await User.findById(userId);
 
-    if (updateData.email && updateData.email !== trainer.email) {
-      if (!Validators.validateEmail(updateData.email)) {
-        throw new ValidationError("Invalid email format");
+      if (!user) {
+        throw new NotFoundError("User not found");
       }
-      const existing = await User.findOne({ email: updateData.email });
-      if (existing) throw new ConflictError("Email already in use");
+
+      // Update basic fields (only if provided)
+      if (updates.email && updates.email !== user.email) {
+        const existingEmail = await User.findOne({
+          email: updates.email,
+          _id: { $ne: userId },
+        });
+        if (existingEmail) {
+          throw new ConflictError("Email already in use");
+        }
+        user.email = updates.email;
+      }
+
+      if (updates.username && updates.username !== user.username) {
+        const existingUsername = await User.findOne({
+          username: updates.username,
+          _id: { $ne: userId },
+        });
+        if (existingUsername) {
+          throw new ConflictError("Username already in use");
+        }
+        user.username = updates.username;
+      }
+
+      if (updates.status) {
+        if (!["ACTIVE", "INACTIVE", "ON_LEAVE", "SUSPENDED"].includes(updates.status)) {
+          throw new ValidationError("Invalid status");
+        }
+        user.status = updates.status;
+      }
+
+      // Update profile fields (only if provided)
+      if (updates.profile) {
+        // Update each profile field only if it's provided in the update
+        if (updates.profile.firstName !== undefined) user.profile.firstName = updates.profile.firstName;
+        if (updates.profile.lastName !== undefined) user.profile.lastName = updates.profile.lastName;
+        if (updates.profile.phone !== undefined) user.profile.phone = updates.profile.phone;
+        if (updates.profile.dateOfBirth !== undefined) user.profile.dateOfBirth = updates.profile.dateOfBirth;
+        if (updates.profile.gender !== undefined) user.profile.gender = updates.profile.gender;
+        if (updates.profile.address !== undefined) user.profile.address = updates.profile.address;
+        if (updates.profile.city !== undefined) user.profile.city = updates.profile.city;
+        if (updates.profile.state !== undefined) user.profile.state = updates.profile.state;
+        if (updates.profile.zipCode !== undefined) user.profile.zipCode = updates.profile.zipCode;
+        if (updates.profile.country !== undefined) user.profile.country = updates.profile.country;
+        if (updates.profile.employeeId !== undefined) user.profile.employeeId = updates.profile.employeeId;
+        if (updates.profile.department !== undefined) user.profile.department = updates.profile.department;
+        if (updates.profile.designation !== undefined) user.profile.designation = updates.profile.designation;
+        if (updates.profile.qualification !== undefined) user.profile.qualification = updates.profile.qualification;
+        if (updates.profile.experience !== undefined) user.profile.experience = updates.profile.experience;
+        if (updates.profile.bio !== undefined) user.profile.bio = updates.profile.bio;
+        if (updates.profile.joiningDate !== undefined) user.profile.joiningDate = updates.profile.joiningDate;
+      }
+
+      // Update client information if provided
+      if (updates.client) {
+        user.profile.client = {
+          ...user.profile.client,
+          ...updates.client,
+        };
+      }
+
+      // Save and return updated user
+      await user.save();
+
+      // Return without password
+      return user.toJSON();
+    } catch (error) {
+      throw error;
     }
-
-    const allowedFields = ["profile", "email", "reportingManager"];
-    Object.keys(updateData).forEach((key) => {
-      if (allowedFields.includes(key)) trainer[key] = updateData[key];
-    });
-
-    await trainer.save();
-    return trainer.toJSON();
   }
 
   async getAllTrainers(filters = {}, page = 1, limit = 10) {
-    const query = { role: "TRAINER" };
-    
-    if (filters.status) query.status = filters.status;
-    if (filters.search) {
-      query.$or = [
-        { username: new RegExp(filters.search, "i") },
-        { email: new RegExp(filters.search, "i") },
-        { "profile.firstName": new RegExp(filters.search, "i") },
-        { "profile.lastName": new RegExp(filters.search, "i") },
-      ];
+    try {
+      const query = { role: "TRAINER" };
+
+      // Filter by status
+      if (filters.status) {
+        query.status = filters.status;
+      }
+
+      // Search by name, email, or username
+      if (filters.search) {
+        query.$or = [
+          { username: { $regex: filters.search, $options: "i" } },
+          { email: { $regex: filters.search, $options: "i" } },
+          { "profile.firstName": { $regex: filters.search, $options: "i" } },
+          { "profile.lastName": { $regex: filters.search, $options: "i" } },
+          { "profile.employeeId": { $regex: filters.search, $options: "i" } },
+        ];
+      }
+
+      const skip = (page - 1) * limit;
+
+      const trainers = await User.find(query)
+        .select("-password")
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+      const total = await User.countDocuments(query);
+
+      return {
+        trainers,
+        pagination: {
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      throw error;
     }
-
-    const skip = (page - 1) * limit;
-    const trainers = await User.find(query)
-      .populate(
-        "reportingManager",
-        "username profile.firstName profile.lastName"
-      )
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 });
-
-    const total = await User.countDocuments(query);
-    
-    return {
-      trainers: trainers.map((t) => t.toJSON()),
-      pagination: { total, page, limit, pages: Math.ceil(total / limit) },
-    };
   }
 
   async deactivateTrainer(trainerId) {
-    const trainer = await User.findById(trainerId);
-    if (!trainer) throw new NotFoundError("Trainer not found");
-    
-    trainer.status = "INACTIVE";
-    trainer.deletedAt = new Date();
-    await trainer.save();
-    
-    return trainer.toJSON();
+    try {
+      const trainer = await User.findByIdAndUpdate(
+        trainerId,
+        { status: "INACTIVE" },
+        { new: true, runValidators: false } // ✅ Skip validation to avoid joiningDate error
+      ).select("-password");
+
+      if (!trainer) {
+        throw new NotFoundError("Trainer not found");
+      }
+
+      return trainer;
+    } catch (error) {
+      throw error;
+    }
   }
 
   async activateTrainer(trainerId) {
-    const trainer = await User.findById(trainerId);
-    if (!trainer) throw new NotFoundError("Trainer not found");
-    
-    trainer.status = "ACTIVE";
-    trainer.deletedAt = undefined;
-    await trainer.save();
-    
-    return trainer.toJSON();
+    try {
+      const trainer = await User.findByIdAndUpdate(
+        trainerId,
+        { status: "ACTIVE" },
+        { new: true, runValidators: false } // ✅ Skip validation to avoid joiningDate error
+      ).select("-password");
+
+      if (!trainer) {
+        throw new NotFoundError("Trainer not found");
+      }
+
+      return trainer;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async searchTrainers(searchTerm) {
+    try {
+      const trainers = await User.find(
+        {
+          role: "TRAINER",
+          $or: [
+            { username: { $regex: searchTerm, $options: "i" } },
+            { email: { $regex: searchTerm, $options: "i" } },
+            { "profile.firstName": { $regex: searchTerm, $options: "i" } },
+            { "profile.lastName": { $regex: searchTerm, $options: "i" } },
+          ],
+        },
+        "-password"
+      ).limit(10);
+
+      return trainers;
+    } catch (error) {
+      throw error;
+    }
   }
 
   async bulkImportTrainers(trainersData) {
-    const results = {
-      success: [],
-      failed: [],
-    };
+    try {
+      const createdTrainers = [];
+      const errors = [];
 
-    for (const data of trainersData) {
-      try {
-        const trainer = await this.createTrainer(data);
-        results.success.push(trainer);
-      } catch (error) {
-        results.failed.push({
-          data,
-          error: error.message,
-        });
+      for (const trainerData of trainersData) {
+        try {
+          const trainer = await this.createTrainer(trainerData);
+          createdTrainers.push(trainer);
+        } catch (error) {
+          errors.push({
+            email: trainerData.email,
+            error: error.message,
+          });
+        }
       }
-    }
 
-    return results;
+      return {
+        created: createdTrainers.length,
+        failed: errors.length,
+        errors,
+        trainers: createdTrainers,
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
-  async searchTrainers(searchTerm, fields = ['username', 'email']) {
-    const query = {
-      $or: fields.map(field => ({
-        [field]: { $regex: searchTerm, $options: 'i' },
-      })),
-    };
-
-    const trainers = await User.find(query)
-      .limit(10)
-      .select('username email profile.firstName profile.lastName');
-
-    return trainers.map(t => t.toJSON());
-  }
-
-  async getUsersCountByRole(role = null) {
-    const query = {};
-    if (role) {
-      query.role = role;
+  async getUsersCountByRole(role) {
+    try {
+      const count = await User.countDocuments({ role });
+      return count;
+    } catch (error) {
+      throw error;
     }
-
-    const count = await User.countDocuments(query);
-    return count;
   }
 
   async getActiveTrainersCount() {
-    const count = await User.countDocuments({
-      role: "TRAINER",
-      status: "ACTIVE",
-    });
-    return count;
-  }
-
-  async getAllUsers(filters = {}, page = 1, limit = 10) {
-    const query = {};
-
-    if (filters.role) {
-      query.role = filters.role;
+    try {
+      const count = await User.countDocuments({
+        role: "TRAINER",
+        status: "ACTIVE",
+      });
+      return count;
+    } catch (error) {
+      throw error;
     }
-    if (filters.status) {
-      query.status = filters.status;
-    }
-
-    const skip = (page - 1) * limit;
-
-    const users = await User.find(query)
-      .select("-password")
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 });
-
-    const total = await User.countDocuments(query);
-
-    return {
-      users: users.map((u) => u.toJSON()),
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-      },
-    };
   }
-
- }
+}

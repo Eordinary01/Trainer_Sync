@@ -24,6 +24,13 @@ attendanceRouter.post(
   (req, res, next) => attendanceController.clockOut(req, res, next)
 );
 
+attendanceRouter.put(
+  '/:attendanceId',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => attendanceController.editAttendance(req, res, next)
+);
+
 // ✅ FIXED: Move specific routes BEFORE parameterized routes
 attendanceRouter.get('/today', authenticate, (req, res, next) =>
   attendanceController.getTodayStatus(req, res, next)

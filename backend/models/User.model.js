@@ -50,25 +50,38 @@ const userSchema = new Schema(
         type: String,
         required: [true, "Phone number is required"],
       },
+      dateOfBirth: Date,
+      gender: String,
+      address: String,
+      city: String,
+      state: String,
+      zipCode: String,
+      country: String,
       employeeId: {
         type: String,
         unique: true,
         sparse: true,
       },
+      department: String,
+      designation: String,
+      qualification: String,
+      experience: Number,
+      bio: String,
       joiningDate: {
         type: Date,
-        required: [true, "Joining date is required"],
+        // ✅ NOT required here - will be set during creation
       },
       skills: [String],
       client: {
         name: String,
+        email: String,
+        phone: String,
         address: String,
         city: String,
         state: String,
         zipCode: String,
       },
       avatar: String,
-      bio: String,
     },
     createdBy: {
       type: Schema.Types.ObjectId,
@@ -92,7 +105,7 @@ const userSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["ACTIVE", "INACTIVE", "ON_LEAVE"],
+      enum: ["ACTIVE", "INACTIVE", "ON_LEAVE", "SUSPENDED"],
       default: "ACTIVE",
     },
     loginAttempts: { type: Number, default: 0 },
@@ -113,6 +126,14 @@ userSchema.pre("save", async function (next) {
       const error = new Error("Only one ADMIN user can exist in the system");
       return next(error);
     }
+  }
+  next();
+});
+
+// ✅ Ensure joiningDate is set on creation
+userSchema.pre("save", async function (next) {
+  if (this.isNew && !this.profile.joiningDate) {
+    this.profile.joiningDate = new Date();
   }
   next();
 });
@@ -140,7 +161,6 @@ userSchema.methods.isLocked = function () {
 };
 
 // Increment login attempts
-
 userSchema.methods.incLoginAttempts = async function () {
   // If lock has expired, reset attempts
   if (this.lockUntil && this.lockUntil < Date.now()) {
