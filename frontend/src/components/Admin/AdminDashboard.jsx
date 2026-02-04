@@ -238,6 +238,9 @@ export default function AdminDashboard() {
             <span className="text-xs text-gray-500">
               {user.location.latitude?.toFixed(4)}, {user.location.longitude?.toFixed(4)}
             </span>
+            <span className="text-xs text-gray-500">
+              &nbsp;|&nbsp; {user.location.address || "No address available"}
+            </span>
           </div>
         )}
       </div>

@@ -2,7 +2,7 @@
 import { LeaveService } from "../services/LeaveService.js";
 import { EmailService } from "../services/EmailService.js"; // Import EmailService
 import { Leave } from "../models/Leave.model.js";
-import  User  from "../models/User.model.js";
+import User from "../models/User.model.js";
 
 export class LeaveController {
   constructor() {
@@ -150,12 +150,10 @@ export class LeaveController {
         // Get all HR and Admin emails
         const hrAdmins = await User.find({
           role: { $in: ["HR", "ADMIN"] },
-          status: "ACTIVE", 
+          status: "ACTIVE",
         }).select("email profile.firstName profile.lastName role username");
 
         // console.log("🔍 [DEBUG] Found HR/Admin users:", hrAdmins.length);
-        
-         
 
         const trainerName = `${leave.trainerId.profile.firstName} ${leave.trainerId.profile.lastName}`;
 
@@ -228,6 +226,12 @@ export class LeaveController {
             ? leave.trainerId.username
             : "Trainer";
 
+      const approvedByName =
+        leave.approvedBy?.profile?.firstName &&
+        leave.approvedBy?.profile?.lastName
+          ? `${leave.approvedBy.profile.firstName} ${leave.approvedBy.profile.lastName}`
+          : leave.approvedBy?.username || "Admin";
+
       const trainerEmployeeId = leave.trainerId?.profile?.employeeId || "N/A";
       const leaveType = leave.leaveType;
       const fromDate = new Date(leave.fromDate).toLocaleDateString("en-US");
@@ -253,6 +257,7 @@ export class LeaveController {
               toDate: leave.toDate,
               numberOfDays: totalDays,
               comments: adminComments,
+              approvedBy: approvedByName,
             },
             true, // approved
           );
@@ -288,7 +293,7 @@ export class LeaveController {
                   <li><strong>Approved By:</strong> ${userName}</li>
                   ${adminComments ? `<li><strong>Comments:</strong> ${adminComments}</li>` : ""}
                 </ul>
-                <p>This action was performed by ${userName}.</p>
+                <p>This action was performed by ${approvedByName}.</p>
               `,
             );
             console.log(
@@ -306,7 +311,10 @@ export class LeaveController {
       res.status(200).json({
         success: true,
         message: "Leave approved successfully",
-        data: leave,
+        data: {
+          ...leave.toObject(),
+          approvedByName
+        },
       });
     } catch (error) {
       console.error("Error in approveLeave:", error);
@@ -337,6 +345,14 @@ export class LeaveController {
             ? leave.trainerId.username
             : "Trainer";
 
+      const rejectorName =
+        leave.rejectedBy?.profile?.firstName &&
+        leave.rejectedBy?.profile?.lastName
+          ? `${leave.rejectedBy.profile.firstName} ${leave.rejectedBy.profile.lastName}`
+          : leave.rejectedBy?.username
+            ? leave.rejectedBy.username
+            : "Admin";
+
       const trainerEmployeeId = leave.trainerId?.profile?.employeeId || "N/A";
       const leaveType = leave.leaveType;
       const fromDate = new Date(leave.fromDate).toLocaleDateString("en-US");
@@ -353,7 +369,7 @@ export class LeaveController {
       try {
         const trainerEmail = leave.trainerId?.email;
         // console.log(trainerEmail);
-        
+
         if (trainerEmail) {
           await this.emailService.sendLeaveApprovalEmail(
             trainerEmail,
@@ -364,6 +380,7 @@ export class LeaveController {
               toDate: leave.toDate,
               numberOfDays: totalDays,
               comments: adminComments,
+              rejectedBy: rejectorName,
             },
             false, // rejected
           );
@@ -399,7 +416,7 @@ export class LeaveController {
                   <li><strong>Rejected By:</strong> ${userName}</li>
                   ${adminComments ? `<li><strong>Reason:</strong> ${adminComments}</li>` : ""}
                 </ul>
-                <p>This action was performed by ${userName}.</p>
+                <p>This action was performed by ${rejectorName}.</p>
               `,
             );
             console.log(
@@ -417,7 +434,10 @@ export class LeaveController {
       res.status(200).json({
         success: true,
         message: "Leave rejected successfully",
-        data: leave,
+        data: {
+          ...leave.toObject(),
+          rejectorName,
+        },
       });
     } catch (error) {
       console.error("Error in rejectLeave:", error);
@@ -546,7 +566,7 @@ export class LeaveController {
         // Get all HR and Admin emails
         const hrAdmins = await User.find({
           role: { $in: ["HR", "ADMIN"] },
-          status: 'ACTIVE',
+          status: "ACTIVE",
         }).select("email profile.firstName profile.lastName");
 
         for (const admin of hrAdmins) {

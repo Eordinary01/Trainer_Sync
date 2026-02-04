@@ -398,136 +398,162 @@ export default function TrainerDetailedView() {
       )}
 
       {/* Attendance Tab */}
-      {activeTab === "attendance" && (
-        <div className="space-y-6">
-          {/* Filters */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex flex-col sm:flex-row gap-4 items-end">
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    value={dateRange.startDate}
-                    onChange={(e) =>
-                      setDateRange((prev) => ({
-                        ...prev,
-                        startDate: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    value={dateRange.endDate}
-                    onChange={(e) =>
-                      setDateRange((prev) => ({
-                        ...prev,
-                        endDate: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <button
-                onClick={handleDateRangeFilter}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Filter className="w-4 h-4" />
-                Apply Filter
-              </button>
-            </div>
+      {/* Attendance Tab */}
+{activeTab === "attendance" && (
+  <div className="space-y-6">
+    {/* Filters */}
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div className="flex flex-col sm:flex-row gap-4 items-end">
+        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Start Date
+            </label>
+            <input
+              type="date"
+              value={dateRange.startDate}
+              onChange={(e) =>
+                setDateRange((prev) => ({
+                  ...prev,
+                  startDate: e.target.value,
+                }))
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-
-          {/* Attendance Table */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Clock In
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Clock Out
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Working Hours
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Location
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {attendanceHistory.map((record, index) => (
-                    <tr key={record._id || index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatDate(
-                          record.date || record.clockInTime,
-                          "DD MMM YYYY"
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {record.clockInTime
-                          ? formatDate(record.clockInTime, "HH:MM")
-                          : "N/A"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {record.clockOutTime
-                          ? formatDate(record.clockOutTime, "HH:MM")
-                          : "N/A"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {getWorkingHours(
-                          record.clockInTime,
-                          record.clockOutTime
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {record.location?.address || "N/A"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
-                            record.clockOutTime
-                          )}`}
-                        >
-                          {getStatusText(record.clockOutTime)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {attendanceHistory.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan="6"
-                        className="px-6 py-8 text-center text-gray-500"
-                      >
-                        No attendance records found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={dateRange.endDate}
+              onChange={(e) =>
+                setDateRange((prev) => ({
+                  ...prev,
+                  endDate: e.target.value,
+                }))
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
-      )}
+        <button
+          onClick={handleDateRangeFilter}
+          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Filter className="w-4 h-4" />
+          Apply Filter
+        </button>
+      </div>
+    </div>
+
+    {/* Attendance Table */}
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Date
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Clock In
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Clock Out
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Working Hours
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Clock In Location
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Clock Out Location
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Status
+              </th>
+            </tr>
+          </thead>
+
+          <tbody className="bg-white divide-y divide-gray-200">
+            {attendanceHistory.map((record, index) => (
+              <tr key={record._id || index} className="hover:bg-gray-50">
+                
+                {/* Date */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {formatDate(
+                    record.date || record.clockInTime,
+                    "DD MMM YYYY"
+                  )}
+                </td>
+
+                {/* Clock In */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {record.clockInTime
+                    ? formatDate(record.clockInTime, "HH:mm")
+                    : "N/A"}
+                </td>
+
+                {/* Clock Out */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {record.clockOutTime
+                    ? formatDate(record.clockOutTime, "HH:mm")
+                    : "N/A"}
+                </td>
+
+                {/* Working Hours */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {getWorkingHours(
+                    record.clockInTime,
+                    record.clockOutTime
+                  )}
+                </td>
+
+                {/* Clock In Location */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {record.clockInLocation?.address ||
+                    record.clockInLocation?.name ||
+                    "N/A"}
+                </td>
+
+                {/* Clock Out Location */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {record.clockOutLocation?.address ||
+                    record.clockOutLocation?.name ||
+                    "N/A"}
+                </td>
+
+                {/* Status */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span
+                    className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
+                      record.clockOutTime
+                    )}`}
+                  >
+                    {getStatusText(record.clockOutTime)}
+                  </span>
+                </td>
+
+              </tr>
+            ))}
+
+            {attendanceHistory.length === 0 && (
+              <tr>
+                <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                  No attendance records found
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+)}
+
 
       {/* Analytics Tab */}
       {activeTab === "analytics" && (

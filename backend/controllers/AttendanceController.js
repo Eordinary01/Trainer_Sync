@@ -25,7 +25,8 @@ export class AttendanceController {
         longitude,
       });
 
-      this.sendClockInEmails(result, req, latitude, longitude);
+      // Send emails in background
+      this.sendClockInEmails(result, req);
 
       res.status(200).json({
         success: true,
@@ -37,7 +38,7 @@ export class AttendanceController {
     }
   }
 
-  async sendClockInEmails(result, req, latitude, longitude) {
+  async sendClockInEmails(result, req) {
     setImmediate(async () => {
       try {
         const trainer = await User.findById(req.user.userId).select(
@@ -74,10 +75,12 @@ export class AttendanceController {
           },
         );
 
+        // ✅ Use address if available, otherwise coordinates
         const locationInfo = result.location?.address
           ? result.location.address
-          : `Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`;
+          : `Lat: ${result.location?.latitude?.toFixed(4)}, Lon: ${result.location?.longitude?.toFixed(4)}`;
 
+        // Send to all HR/Admin users
         for (const admin of hrAdmins) {
           if (admin.email) {
             await emailService.sendEmail(
@@ -85,37 +88,38 @@ export class AttendanceController {
               `Clock-In: ${trainerName}`,
               `
                 <h2>Trainer Clocked In</h2>
-                <p>A trainer has clocked in for work:</p>
+                <p>A trainer has started their work:</p>
                 <ul>
-                  <li><strong>Trainer:</strong> ${trainerName} (ID: ${trainerEmployeeId})</li>
+                  <li><strong>Trainer:</strong> ${trainerName}</li>
+                  <li><strong>Employee ID:</strong> ${trainerEmployeeId}</li>
                   <li><strong>Clock-In Time:</strong> ${clockInTime}</li>
                   <li><strong>Location:</strong> ${locationInfo}</li>
                   <li><strong>Status:</strong> Started working</li>
                 </ul>
-                <p>You can view real-time attendance on the admin dashboard.</p>
+                <p>View details on the admin dashboard.</p>
               `,
             );
           }
         }
 
+        // Send confirmation to trainer
         if (trainer?.email) {
           await emailService.sendEmail(
             trainer.email,
             `Clock-In Confirmation`,
             `
-              <h2>Clock-In Successful</h2>
+              <h2>Clock-In Successful ✓</h2>
               <p>You have successfully clocked in:</p>
               <ul>
                 <li><strong>Time:</strong> ${clockInTime}</li>
                 <li><strong>Location:</strong> ${locationInfo}</li>
-                <li><strong>Status:</strong> Active - Remember to clock out when you finish work</li>
               </ul>
-              <p>Have a productive day!</p>
+              <p>Remember to clock out when you finish work.</p>
             `,
           );
         }
       } catch (error) {
-        console.error("Error sending clock-in emails:", error.message);
+        console.error("❌ Error sending clock-in emails:", error.message);
       }
     });
   }
@@ -136,7 +140,8 @@ export class AttendanceController {
         longitude,
       });
 
-      this.sendClockOutEmails(result, req, latitude, longitude);
+      // Send emails in background
+      this.sendClockOutEmails(result, req);
 
       res.status(200).json({
         success: true,
@@ -148,7 +153,7 @@ export class AttendanceController {
     }
   }
 
-  async sendClockOutEmails(result, req, latitude, longitude) {
+  async sendClockOutEmails(result, req) {
     setImmediate(async () => {
       try {
         const trainer = await User.findById(req.user.userId).select(
@@ -171,7 +176,7 @@ export class AttendanceController {
           `📧 Sending clock-out notification to ${hrAdmins.length} HR/Admin users`,
         );
 
-        const clockInTime = new Date(result.clockInTime).toLocaleString(
+        const clockInTime = new Date(result.clockInTime).toLocaleTimeString(
           "en-US",
           {
             hour: "2-digit",
@@ -180,7 +185,7 @@ export class AttendanceController {
           },
         );
 
-        const clockOutTime = new Date(result.clockOutTime).toLocaleString(
+        const clockOutTime = new Date(result.clockOutTime).toLocaleTimeString(
           "en-US",
           {
             hour: "2-digit",
@@ -199,14 +204,16 @@ export class AttendanceController {
           },
         );
 
+        // ✅ Use address if available, otherwise coordinates
         const locationInfo = result.location?.address
           ? result.location.address
-          : `Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`;
+          : `Lat: ${result.location?.latitude?.toFixed(4)}, Lon: ${result.location?.longitude?.toFixed(4)}`;
 
         const totalHours = result.totalWorkingHours || 0;
         const hours = Math.floor(totalHours);
         const minutes = Math.round((totalHours - hours) * 60);
 
+        // Send to all HR/Admin users
         for (const admin of hrAdmins) {
           if (admin.email) {
             await emailService.sendEmail(
@@ -214,34 +221,35 @@ export class AttendanceController {
               `Clock-Out: ${trainerName}`,
               `
                 <h2>Trainer Clocked Out</h2>
-                <p>A trainer has clocked out:</p>
+                <p>A trainer has completed their work:</p>
                 <ul>
-                  <li><strong>Trainer:</strong> ${trainerName} (ID: ${trainerEmployeeId})</li>
+                  <li><strong>Trainer:</strong> ${trainerName}</li>
+                  <li><strong>Employee ID:</strong> ${trainerEmployeeId}</li>
                   <li><strong>Date:</strong> ${clockOutDate}</li>
-                  <li><strong>Clock-In Time:</strong> ${clockInTime}</li>
-                  <li><strong>Clock-Out Time:</strong> ${clockOutTime}</li>
-                  <li><strong>Total Hours:</strong> ${hours}h ${minutes}m</li>
+                  <li><strong>Clock-In:</strong> ${clockInTime}</li>
+                  <li><strong>Clock-Out:</strong> ${clockOutTime}</li>
+                  <li><strong>Working Hours:</strong> ${hours}h ${minutes}m</li>
                   <li><strong>Location:</strong> ${locationInfo}</li>
-                  <li><strong>Status:</strong> Completed for the day</li>
                 </ul>
-                <p>Daily attendance summary has been updated.</p>
+                <p>Daily attendance has been recorded.</p>
               `,
             );
           }
         }
 
+        // Send confirmation to trainer
         if (trainer?.email) {
           await emailService.sendEmail(
             trainer.email,
             `Clock-Out Confirmation`,
             `
-              <h2>Clock-Out Successful</h2>
+              <h2>Clock-Out Successful ✓</h2>
               <p>You have successfully clocked out:</p>
               <ul>
                 <li><strong>Date:</strong> ${clockOutDate}</li>
                 <li><strong>Clock-In:</strong> ${clockInTime}</li>
                 <li><strong>Clock-Out:</strong> ${clockOutTime}</li>
-                <li><strong>Total Hours:</strong> ${hours}h ${minutes}m</li>
+                <li><strong>Working Hours:</strong> ${hours}h ${minutes}m</li>
                 <li><strong>Location:</strong> ${locationInfo}</li>
               </ul>
               <p>Thank you for your work today!</p>
@@ -249,74 +257,72 @@ export class AttendanceController {
           );
         }
       } catch (error) {
-        console.error("Error sending clock-out emails:", error.message);
+        console.error("❌ Error sending clock-out emails:", error.message);
       }
     });
   }
 
   async editAttendance(req, res, next) {
-  try {
-    // Only ADMIN and HR can edit attendance
-    if (!(req.user.role === "ADMIN" || req.user.role === "HR")) {
-      return res.status(403).json({
-        success: false,
-        message: "Only Admin and HR can edit attendance records",
-      });
-    }
-
-    const { attendanceId } = req.params;
-    const { clockInTime, clockOutTime, status, notes } = req.body;
-
-    // Validate required fields
-    if (!attendanceId) {
-      return res.status(400).json({
-        success: false,
-        message: "Attendance ID is required",
-      });
-    }
-
-    if (!clockInTime && !clockOutTime && !status && notes === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one field to update is required",
-      });
-    }
-
-    // Validate date formats if provided
-    if (clockInTime && isNaN(new Date(clockInTime))) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid clockInTime format",
-      });
-    }
-
-    if (clockOutTime && isNaN(new Date(clockOutTime))) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid clockOutTime format",
-      });
-    }
-
-    const result = await this.attendanceService.editAttendance(
-      attendanceId,
-      {
-        clockInTime,
-        clockOutTime,
-        status,
-        notes,
-        modifiedBy: req.user.userId,
+    try {
+      // Only ADMIN and HR can edit attendance
+      if (!(req.user.role === "ADMIN" || req.user.role === "HR")) {
+        return res.status(403).json({
+          success: false,
+          message: "Only Admin and HR can edit attendance records",
+        });
       }
-    );
 
-    res.status(200).json({
-      success: true,
-      message: result.message,
-      data: result.data,
-    });
-  } catch (error) {
-    next(error);
+      const { attendanceId } = req.params;
+      const { clockInTime, clockOutTime, status, notes } = req.body;
+
+      if (!attendanceId) {
+        return res.status(400).json({
+          success: false,
+          message: "Attendance ID is required",
+        });
+      }
+
+      if (!clockInTime && !clockOutTime && !status && notes === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one field to update is required",
+        });
+      }
+
+      if (clockInTime && isNaN(new Date(clockInTime))) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid clockInTime format",
+        });
+      }
+
+      if (clockOutTime && isNaN(new Date(clockOutTime))) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid clockOutTime format",
+        });
+      }
+
+      const result = await this.attendanceService.editAttendance(
+        attendanceId,
+        {
+          clockInTime,
+          clockOutTime,
+          status,
+          notes,
+          modifiedBy: req.user.userId,
+        }
+      );
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-}
 
   async getTodayClockedInList(req, res, next) {
     try {

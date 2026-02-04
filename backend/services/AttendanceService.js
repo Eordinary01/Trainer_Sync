@@ -34,8 +34,10 @@ export class AttendanceService {
       throw new ConflictError('Already clocked in today');
     }
 
-    // Get address from coordinates
+    // ✅ Get address from coordinates (no radius checking)
     const address = await GeolocationService.getAddressFromCoordinates(latitude, longitude);
+
+    console.log(`📍 Clock-in from: ${address}`);
 
     const attendance = new Attendance({
       trainerId,
@@ -94,12 +96,19 @@ export class AttendanceService {
       throw new ValidationError('No active clock-in found for today');
     }
 
+    // ✅ Get address from coordinates (no radius checking)
     const address = await GeolocationService.getAddressFromCoordinates(latitude, longitude);
+
+    console.log(`📍 Clock-out from: ${address}`);
 
     const workingHours = DateUtils.calculateWorkingHours(attendance.clockInTime, new Date());
 
     attendance.clockOutTime = new Date();
-    attendance.clockOutLocation = { latitude, longitude, address };
+    attendance.clockOutLocation = {
+      latitude,
+      longitude,
+      address,
+    };
     attendance.totalWorkingHours = workingHours;
     attendance.status = ATTENDANCE_STATUS.CLOCKED_OUT;
 
@@ -107,6 +116,7 @@ export class AttendanceService {
 
     return {
       _id: attendance._id,
+      clockInTime: attendance.clockInTime,
       clockOutTime: attendance.clockOutTime,
       totalWorkingHours: workingHours,
       location: attendance.clockOutLocation,
@@ -190,7 +200,6 @@ export class AttendanceService {
     };
   }
 
-
   async getTodayStatus(trainerId) {
     const today = DateUtils.getStartOfDay();
     const attendance = await Attendance.findOne({
@@ -204,6 +213,7 @@ export class AttendanceService {
       clockOutTime: attendance?.clockOutTime || null,
       totalWorkingHours: attendance?.totalWorkingHours || 0,
       status: attendance?.status || 'NOT_CLOCKED_IN',
+      location: attendance?.clockInLocation || null,
     };
   }
 

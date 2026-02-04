@@ -27,7 +27,7 @@ const attendanceSchema = new Schema(
     status: {
       type: String,
       enum: ["CLOCKED_IN", "CLOCKED_OUT", "INCOMPLETE"],
-      default: "CLOCKED_IN",
+      default: "INCOMPLETE",
     },
     isLate: Boolean,
     remarks: String,

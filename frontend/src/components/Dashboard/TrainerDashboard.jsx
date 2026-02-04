@@ -11,29 +11,26 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // ✅ Geolocation hook - only gets coordinates
   const { 
-    location, 
-    loading: geoLoading, 
-    error: geoError, 
-    isTracking,
-    startTracking, 
-    stopTracking 
+    error: geoError,
+    getLocation,
   } = useGeolocation({
     enableHighAccuracy: true,
     timeout: 10000,
     maximumAge: 0
   });
 
+  // ✅ Attendance store - has address from backend
   const { 
     todayStatus, 
-    history, 
     loading: attendanceLoading, 
     error: attendanceError,
     getTodayStatus, 
     clockIn, 
     clockOut, 
     getWeeklyReport,
-    getHistory 
+    clearError,
   } = useAttendanceStore();
 
   const [weeklyData, setWeeklyData] = useState([]);
@@ -41,7 +38,9 @@ export default function Dashboard() {
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [leaveBalance, setLeaveBalance] = useState({ casual: 0, sick: 0, paid: 0 });
   const [leaveHistory, setLeaveHistory] = useState([]);
+  const [fetchingLocation, setFetchingLocation] = useState(false);
 
+  // Initialize dashboard
   useEffect(() => {
     const initializeDashboard = async () => {
       try {
@@ -63,12 +62,6 @@ export default function Dashboard() {
         // Set leave data
         setLeaveHistory(recentLeaves);
         setLeaveBalance(balance);
-
-        // AUTO-START LOCATION TRACKING if user is clocked in
-        if (todayStatus?.status === 'CLOCKED_IN') {
-          console.log('User is clocked in, starting location tracking...');
-          startTracking();
-        }
       } catch (error) {
         console.error('Error loading dashboard:', error);
       } finally {
@@ -81,46 +74,52 @@ export default function Dashboard() {
   const isClockedIn = todayStatus?.status === 'CLOCKED_IN';
   const clockInTime = todayStatus?.clockInTime || null;
   const clockOutTime = todayStatus?.clockOutTime || null;
+  // ✅ Get location from store (includes address from backend)
   const todayLocation = todayStatus?.location;
 
+  /**
+   * ✅ Unified clock-in/out handler
+   * Gets coordinates → sends to backend → backend fetches address
+   */
   const handleClockAction = async () => {
-    if (processingAction) return;
+    if (processingAction || fetchingLocation) return;
 
     try {
       setProcessingAction(true);
+      setFetchingLocation(true);
+      clearError(); // Clear any previous errors
 
-      if (!isClockedIn) {
-        // CLOCK IN - Start location tracking first
-        console.log('Starting location tracking for clock in...');
-        startTracking();
-        
-        // Wait a moment for location to be acquired
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        if (!location) {
-          throw new Error('Unable to get your location. Please ensure location services are enabled.');
-        }
+      console.log('📍 Fetching your location...');
 
-        await clockIn(location.latitude, location.longitude);
-        console.log('Clock in successful, location tracking active');
+      // Get coordinates from browser
+      const locationData = await getLocation();
 
-      } else {
-        // CLOCK OUT - Stop location tracking
-        await clockOut(location.latitude, location.longitude);
-        console.log('Clock out successful, stopping location tracking');
-        stopTracking();
+      console.log('✅ Coordinates obtained:', locationData);
+      setFetchingLocation(false);
+
+      if (!locationData?.latitude || !locationData?.longitude) {
+        throw new Error('Unable to get your location. Please ensure location services are enabled.');
       }
 
-      // Refresh all data after clock action
+      // Send to backend - backend will fetch address
+      if (!isClockedIn) {
+        console.log('⏰ Sending clock-in request...');
+        await clockIn(locationData.latitude, locationData.longitude);
+        console.log('✅ Clocked in successfully');
+      } else {
+        console.log('⏰ Sending clock-out request...');
+        await clockOut(locationData.latitude, locationData.longitude);
+        console.log('✅ Clocked out successfully');
+      }
+
+      // Refresh data
       await Promise.all([getTodayStatus(), getWeeklyReport()]);
     } catch (error) {
-      console.error('Error during clock action:', error);
-      // If clock in fails, stop tracking
-      if (!isClockedIn) {
-        stopTracking();
-      }
+      console.error('❌ Error during clock action:', error);
+      // Error is already set in store by clockIn/clockOut
     } finally {
       setProcessingAction(false);
+      setFetchingLocation(false);
     }
   };
 
@@ -141,14 +140,17 @@ export default function Dashboard() {
     : user?.username || 'Trainer';
 
   const getButtonText = () => {
-    if (processingAction) return isClockedIn ? 'PROCESSING CLOCK OUT...' : 'PROCESSING CLOCK IN...';
+    if (fetchingLocation) {
+      return 'FETCHING LOCATION...';
+    }
+    if (processingAction || attendanceLoading) {
+      return isClockedIn ? 'PROCESSING CLOCK OUT...' : 'PROCESSING CLOCK IN...';
+    }
     return isClockedIn ? 'CLOCK OUT' : 'CLOCK IN';
   };
 
-  // Calculate total hours from real weekly data
+  // Calculate total hours
   const totalWeeklyHours = weeklyData.reduce((sum, day) => sum + (day.hours || 0), 0);
-
-  // Calculate total leave balance from real data
   const totalLeaveBalance = leaveBalance.casual + leaveBalance.sick + leaveBalance.paid;
 
   // Format today's working hours
@@ -158,6 +160,16 @@ export default function Dashboard() {
     const end = todayStatus.clockOutTime ? new Date(todayStatus.clockOutTime) : new Date();
     const hours = (end - start) / (1000 * 60 * 60);
     return `${hours.toFixed(1)}h`;
+  };
+
+  // Get location display
+  const getLocationDisplay = () => {
+    if (!todayLocation) return null;
+    // ✅ Display address if available (from backend), otherwise coordinates
+    if (todayLocation.address) {
+      return todayLocation.address;
+    }
+    return `${todayLocation.latitude?.toFixed(4)}, ${todayLocation.longitude?.toFixed(4)}`;
   };
 
   // Get recent leave status
@@ -222,7 +234,7 @@ export default function Dashboard() {
               </p>
               
               {clockInTime && (
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-gray-600 space-y-1">
                   <p>⏰ Clock In: {formatTime(clockInTime)}</p>
                   {clockOutTime && (
                     <p>⏰ Clock Out: {formatTime(clockOutTime)}</p>
@@ -233,53 +245,53 @@ export default function Dashboard() {
                 </div>
               )}
 
+              {/* ✅ Display location with address from backend */}
               {todayLocation && (
-                <div className="flex items-start gap-2 text-xs text-gray-500">
-                  <MapPin size={14} />
-                  <span>
-                    Location: {todayLocation.latitude?.toFixed(4)}, {todayLocation.longitude?.toFixed(4)}
+                <div className="flex items-start gap-2 text-xs text-gray-600 bg-blue-50 p-2 rounded">
+                  <MapPin size={14} className="flex-shrink-0 mt-0.5" />
+                  <span className="break-words">
+                    {getLocationDisplay()}
                   </span>
                 </div>
               )}
             </div>
 
+            {/* Loading State */}
+            {fetchingLocation && (
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
+                <div className="flex justify-center mb-2">
+                  <Loader2 className="animate-spin text-blue-600" size={24} />
+                </div>
+                <p className="text-sm font-medium text-blue-900">
+                  Fetching your location...
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  Please wait and enable location access
+                </p>
+              </div>
+            )}
+
+            {/* Clock Button */}
             <button
               onClick={handleClockAction}
-              disabled={processingAction || attendanceLoading}
+              disabled={processingAction || attendanceLoading || fetchingLocation}
               className={`w-full py-4 rounded-lg font-bold text-lg text-white transition-colors flex items-center justify-center gap-2
                 ${isClockedIn ? 'bg-red-500 hover:bg-red-600 disabled:bg-red-300' : 'bg-green-500 hover:bg-green-600 disabled:bg-green-300'}
-                ${(processingAction || attendanceLoading) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                ${(processingAction || attendanceLoading || fetchingLocation) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
             >
-              {(processingAction || attendanceLoading) && <Loader2 className="animate-spin" size={20} />}
+              {(processingAction || fetchingLocation) && <Loader2 className="animate-spin" size={20} />}
               {getButtonText()}
             </button>
 
-            {/* Location Tracking Status */}
-            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-gray-600 flex items-center gap-2">
-                  <MapPin size={16} />
-                  <strong>Location Tracking:</strong>
-                </p>
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  isTracking ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {isTracking ? 'ACTIVE' : 'INACTIVE'}
-                </span>
-              </div>
-              
-              {location && (
-                <div className="text-xs text-gray-500 space-y-1">
-                  <p>Current: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}</p>
-                  <p className="text-green-600">✓ Real-time tracking {isClockedIn ? 'active' : 'ready'}</p>
-                </div>
-              )}
-              
-              {!location && isClockedIn && (
-                <div className="text-xs text-orange-600">
-                  ⚠ Acquiring location...
-                </div>
-              )}
+            {/* Info Message */}
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+              <p className="flex items-center gap-2 mb-1">
+                <MapPin size={14} />
+                <strong>Note:</strong>
+              </p>
+              <p className="ml-6">
+                You can clock in from anywhere - office, home, or client location
+              </p>
             </div>
           </div>
 
@@ -419,9 +431,9 @@ export default function Dashboard() {
                 </p>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600">Location Tracking</p>
-                <p className={`text-lg font-semibold ${isTracking ? 'text-green-600' : 'text-orange-600'}`}>
-                  {isTracking ? 'Active' : 'Inactive'}
+                <p className="text-sm text-gray-600">Location</p>
+                <p className={`text-lg font-semibold ${todayLocation ? 'text-green-600' : 'text-orange-600'}`}>
+                  {todayLocation ? '✓ Recorded' : 'Pending'}
                 </p>
               </div>
             </div>

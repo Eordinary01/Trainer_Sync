@@ -232,52 +232,82 @@ async rejectLeave(leaveId, adminId, comments = '') {
   }
 
   async getLeaveHistory(userId, filters = {}, isAdminOrHR = false) {
-    const query = {};
-    
-    // For regular trainers, only show their own leaves
-    // For admin/HR, show all leaves unless a specific trainer is filtered
-    if (!isAdminOrHR || filters.trainerId) {
-      query.trainerId = filters.trainerId || userId;
-    }
+  const query = {};
 
-    if (filters.status) {
-      query.status = filters.status;
-    }
+  if (!isAdminOrHR || filters.trainerId) {
+    query.trainerId = filters.trainerId || userId;
+  }
 
-    if (filters.leaveType) {
-      query.leaveType = filters.leaveType;
-    }
+  if (filters.status) {
+    query.status = filters.status;
+  }
 
-    if (filters.fromDate && filters.toDate) {
-      query.fromDate = {
-        $gte: new Date(filters.fromDate),
-        $lte: new Date(filters.toDate),
-      };
-    }
+  if (filters.leaveType) {
+    query.leaveType = filters.leaveType;
+  }
 
-    const page = filters.page || 1;
-    const limit = filters.limit || 10;
-    const skip = (page - 1) * limit;
-
-    const leaves = await Leave.find(query)
-      .populate('trainerId', 'username profile.firstName profile.lastName email profile.employeeId')
-      .populate('approvedBy', 'username profile.firstName profile.lastName')
-      .skip(skip)
-      .limit(limit)
-      .sort({ appliedOn: -1 });
-
-    const total = await Leave.countDocuments(query);
-
-    return {
-      leaves,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-      },
+  if (filters.fromDate && filters.toDate) {
+    query.fromDate = {
+      $gte: new Date(filters.fromDate),
+      $lte: new Date(filters.toDate),
     };
   }
+
+  const page = filters.page || 1;
+  const limit = filters.limit || 10;
+  const skip = (page - 1) * limit;
+
+  const leaves = await Leave.find(query)
+    .populate(
+      "trainerId",
+      "username profile.firstName profile.lastName email profile.employeeId"
+    )
+    .populate(
+      "approvedBy",
+      "username profile.firstName profile.lastName"
+    )
+    .populate(
+      "rejectedBy",
+      "username profile.firstName profile.lastName"
+    )
+    .skip(skip)
+    .limit(limit)
+    .sort({ appliedOn: -1 });
+
+  // ✅ Attach Names
+  const formattedLeaves = leaves.map((leave) => {
+    const leaveObj = leave.toObject();
+
+    // Approved By Name
+    leaveObj.approvedByName =
+      leave.approvedBy?.profile?.firstName &&
+      leave.approvedBy?.profile?.lastName
+        ? `${leave.approvedBy.profile.firstName} ${leave.approvedBy.profile.lastName}`
+        : leave.approvedBy?.username || null;
+
+    // Rejected By Name
+    leaveObj.rejectedByName =
+      leave.rejectedBy?.profile?.firstName &&
+      leave.rejectedBy?.profile?.lastName
+        ? `${leave.rejectedBy.profile.firstName} ${leave.rejectedBy.profile.lastName}`
+        : leave.rejectedBy?.username || null;
+
+    return leaveObj;
+  });
+
+  const total = await Leave.countDocuments(query);
+
+  return {
+    leaves: formattedLeaves,
+    pagination: {
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    },
+  };
+}
+
 
   async updateLeaveBalance(trainerId, leaveType, daysToAdd) {
     const trainer = await User.findById(trainerId);
