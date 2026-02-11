@@ -378,9 +378,18 @@ userSchema.methods.toJSON = function () {
   delete obj.loginAttempts;
   delete obj.lockUntil;
   
+  // ✅ FIXED: Handle case where paid might be a number or object
   if (obj.leaveBalance && obj.leaveBalance.paid) {
-    obj.leaveBalance.paid.available = 
-      obj.leaveBalance.paid.available >= 9999 ? "Unlimited" : obj.leaveBalance.paid.available;
+    if (typeof obj.leaveBalance.paid === 'number') {
+      obj.leaveBalance.paid = {
+        available: obj.leaveBalance.paid >= 9999 ? "Unlimited" : obj.leaveBalance.paid,
+        used: 0,
+        carryForward: 0
+      };
+    } else if (obj.leaveBalance.paid.available !== undefined) {
+      obj.leaveBalance.paid.available = 
+        obj.leaveBalance.paid.available >= 9999 ? "Unlimited" : obj.leaveBalance.paid.available;
+    }
   }
   
   return obj;
