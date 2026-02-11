@@ -14,9 +14,9 @@ import {
   Menu,
   X,
   FileText,
+  Clock,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { NotificationBell } from "../Notifications/NotificationBell.jsx";
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -26,7 +26,6 @@ export default function Navbar() {
   // Dropdown states
   const [openMenu, setOpenMenu] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [showMobileProfile, setShowMobileProfile] = useState(false);
 
   const isAdminOrHR = user?.role === "ADMIN" || user?.role === "HR";
   const isAdmin = user?.role === "ADMIN";
@@ -45,7 +44,6 @@ export default function Navbar() {
     navigate(path);
     setOpenMenu(null);
     setIsMobileMenuOpen(false);
-    setShowMobileProfile(false);
   };
 
   const handleDashboardNavigation = () => {
@@ -66,7 +64,8 @@ export default function Navbar() {
             {user?.role === "ADMIN" && "Administrator Panel"}
             {user?.role === "HR" && "HR Management Panel"}
             {user?.role === "TRAINER" && "Trainer Dashboard"}
-          </div>        </div>
+          </div>
+        </div>
 
         {/* Mobile Menu Button */}
         <button
@@ -148,8 +147,31 @@ export default function Navbar() {
                   >
                     <User size={16} /> Create Trainer
                   </button>
+                  <button
+                    onClick={() => handleNavigation("/admin/clocked-in")}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                  >
+                    <Clock size={16} /> Currently Clocked In
+                  </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Attendance Menu - For Admin/HR */}
+          {isAdminOrHR && (
+            <div className="relative">
+              <button
+                onClick={() => handleNavigation("/admin/attendance")}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                  location.pathname.includes("/admin/attendance")
+                    ? "bg-orange-100 text-orange-700"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <Clock size={18} />
+                <span className="hidden sm:block">Attendance</span>
+              </button>
             </div>
           )}
 
@@ -171,40 +193,33 @@ export default function Navbar() {
               </button>
               {openMenu === "leaves" && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-50">
-                  {/* For Admin/HR - Management Options */}
+                  {/* For Admin/HR - Comprehensive Leave Management */}
                   {isAdminOrHR && (
-                    <>
-                      <button
-                        onClick={() => handleNavigation("/admin/leaves/pending")}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
-                      >
-                        <FileText size={16} /> Pending Requests
-                      </button>
-                      <div className="border-t my-1"></div>
-                    </>
+                    <button
+                      onClick={() => handleNavigation("/admin/leaves")}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <FileText size={16} /> Leave Management
+                    </button>
                   )}
                   
                   {/* For Trainers - Apply Leave Only */}
                   {isTrainer && (
-                    <button
-                      onClick={() => handleNavigation("/trainer/apply-leave")}
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
-                    >
-                      <Calendar size={16} /> Apply for Leave
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleNavigation("/trainer/apply-leave")}
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                      >
+                        <Calendar size={16} /> Apply for Leave
+                      </button>
+                      <button
+                        onClick={() => handleNavigation("/trainer/leaves/reports")}
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                      >
+                        <FileText size={16} /> Leave History
+                      </button>
+                    </>
                   )}
-                  
-                  {/* Leave History for All */}
-                  <button
-                    onClick={() => 
-                      isAdminOrHR 
-                        ? handleNavigation("/admin/leaves/reports") 
-                        : handleNavigation("/trainer/leaves/reports")
-                    }
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
-                  >
-                    <FileText size={16} /> Leave History
-                  </button>
                 </div>
               )}
             </div>
@@ -250,9 +265,6 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Notification Bell */}
-          {/* <NotificationBell /> */}
-
           {/* User Profile Dropdown */}
           <div className="relative">
             <button
@@ -274,6 +286,12 @@ export default function Navbar() {
             </button>
             {openMenu === "user" && (
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-50">
+                <button
+                  onClick={() => handleNavigation("/change-password")}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                >
+                  <Settings size={16} /> Change Password
+                </button>
                 <button
                   onClick={handleLogout}
                   className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-2"
@@ -309,11 +327,35 @@ export default function Navbar() {
 
             {/* Trainers - Mobile */}
             {isAdminOrHR && (
+              <>
+                <button
+                  onClick={() => handleNavigation("/admin/trainers")}
+                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded"
+                >
+                  <Users size={18} /> All Trainers
+                </button>
+                <button
+                  onClick={() => handleNavigation("/admin/trainers/create")}
+                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded"
+                >
+                  <User size={18} /> Create Trainer
+                </button>
+                <button
+                  onClick={() => handleNavigation("/admin/clocked-in")}
+                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded"
+                >
+                  <Clock size={18} /> Currently Clocked In
+                </button>
+              </>
+            )}
+
+            {/* Attendance - Mobile */}
+            {isAdminOrHR && (
               <button
-                onClick={() => handleNavigation("/admin/trainers")}
+                onClick={() => handleNavigation("/admin/attendance")}
                 className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded"
               >
-                <Users size={18} /> Trainers
+                <Clock size={18} /> Attendance Reports
               </button>
             )}
 
@@ -327,34 +369,30 @@ export default function Navbar() {
                 {/* Admin/HR Leave Management */}
                 {isAdminOrHR && (
                   <button
-                    onClick={() => handleNavigation("/admin/leaves/pending")}
+                    onClick={() => handleNavigation("/admin/leaves")}
                     className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
                   >
-                    <FileText size={18} /> Pending Requests
+                    <FileText size={18} /> Leave Management
                   </button>
                 )}
                 
-                {/* Trainer - Apply Leave Only */}
+                {/* Trainer - Apply Leave and Leave History */}
                 {isTrainer && (
-                  <button
-                    onClick={() => handleNavigation("/trainer/leaves/apply")}
-                    className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
-                  >
-                    <Calendar size={18} /> Apply for Leave
-                  </button>
+                  <>
+                    <button
+                      onClick={() => handleNavigation("/trainer/apply-leave")}
+                      className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
+                    >
+                      <Calendar size={18} /> Apply for Leave
+                    </button>
+                    <button
+                      onClick={() => handleNavigation("/trainer/leaves/reports")}
+                      className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
+                    >
+                      <FileText size={18} /> Leave History
+                    </button>
+                  </>
                 )}
-                
-                {/* Leave History for All */}
-                <button
-                  onClick={() => 
-                    isAdminOrHR 
-                      ? handleNavigation("/admin/leaves/history") 
-                      : handleNavigation("/trainer/leaves/history")
-                  }
-                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
-                >
-                  <FileText size={18} /> Leave History
-                </button>
               </div>
             )}
 
@@ -374,14 +412,10 @@ export default function Navbar() {
                 <UserCog size={18} /> My Profile
               </button>
               <button
-                onClick={() => 
-                  isAdminOrHR 
-                    ? handleNavigation("/admin/settings") 
-                    : handleNavigation("/trainer/settings")
-                }
+                onClick={() => handleNavigation("/change-password")}
                 className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
               >
-                <Settings size={18} /> Settings
+                <Settings size={18} /> Change Password
               </button>
             </div>
 

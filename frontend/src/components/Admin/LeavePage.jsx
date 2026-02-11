@@ -60,7 +60,7 @@ export function PendingLeaves() {
     setProcessingAction("approve");
 
     try {
-      await api.put(`/leaves/${leaveId}/approve`, {
+      await api.post(`/leaves/${leaveId}/approve`, {
         comments: remarks,
         remarks: remarks,
       });
@@ -89,7 +89,7 @@ export function PendingLeaves() {
     setProcessingAction("reject");
 
     try {
-      await api.put(`/leaves/${leaveId}/reject`, {
+      await api.post(`/leaves/${leaveId}/reject`, {
         comments: remarks,
         remarks: remarks,
       });

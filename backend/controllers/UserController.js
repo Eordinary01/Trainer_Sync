@@ -2,7 +2,7 @@ import { UserService } from "../services/UserService.js";
 import { EmailService } from "../services/EmailService.js";
 import { Validators } from "../utils/validators.js";
 
-const userService = new UserService();
+// ✅ Removed duplicate instantiation here
 const emailService = new EmailService();
 
 export class UserController {
@@ -12,15 +12,23 @@ export class UserController {
 
   async createTrainer(req, res, next) {
     try {
-      const { username, email, profile } = req.body;
+      const { username, email, profile, trainerCategory } = req.body;
 
-      console.log('🚀 Creating trainer with data:', { username, email, profile });
+      console.log('🚀 Creating trainer with data:', { username, email, profile, trainerCategory });
 
       // ✅ Validate required profile fields
       if (!profile?.firstName || !profile?.lastName || !profile?.phone) {
         return res.status(400).json({
           success: false,
           message: "Missing required profile fields: firstName, lastName, and phone are required"
+        });
+      }
+
+      // ✅ Validate trainer category
+      if (!trainerCategory) {
+        return res.status(400).json({
+          success: false,
+          message: "Trainer category is required (PERMANENT or CONTRACTED)"
         });
       }
 
@@ -43,11 +51,12 @@ export class UserController {
         email,
         password: tempPassword,
         role: "TRAINER",
+        trainerCategory: trainerCategory || "PERMANENT", 
         profile: {
           ...profile,
           joiningDate: profile.joiningDate || new Date() // Ensure joiningDate is set
         },
-        createdBy: req.user._id,
+        createdBy: req.user?._id, // ✅ Optional chaining
       };
 
       console.log('💾 Calling service to create trainer...');
@@ -59,7 +68,8 @@ export class UserController {
         await emailService.sendWelcomeEmail(
           trainer.email,
           trainer.username,
-          tempPassword
+          tempPassword,
+          trainer.trainerCategory
         );
         console.log('📧 Welcome email sent successfully');
       } catch (emailError) {
@@ -75,16 +85,32 @@ export class UserController {
           username: trainer.username,
           email: trainer.email,
           role: trainer.role,
+          trainerCategory: trainer.trainerCategory, // ✅ Added category
           profile: trainer.profile,
           status: trainer.status,
         },
       });
     } catch (error) {
       console.error('❌ Trainer creation failed:', error);
+      
+      // ✅ Better error handling
+      if (error.name === 'ValidationError') {
+        return res.status(400).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
+      if (error.name === 'ConflictError') {
+        return res.status(409).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
       next(error);
     }
   }
-
 
   async getProfile(req, res, next) {
     try {
@@ -99,20 +125,55 @@ export class UserController {
       res.status(200).json({ success: true, data: profile });
     } catch (error) {
       console.error("getProfile error:", error);
-      res.status(500).json({ success: false, message: "Internal server error" });
+      
+      if (error.name === 'NotFoundError') {
+        return res.status(404).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
+      res.status(500).json({ 
+        success: false, 
+        message: "Internal server error" 
+      });
     }
   }
 
   async updateProfile(req, res, next) {
     try {
-      const userId = req.params.id || req.user.userId;
+      const userId = req.params.id || req.user?.userId;
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          message: "User ID is required"
+        });
+      }
+
       const updated = await this.userService.updateTrainerProfile(userId, req.body);
+      
       res.status(200).json({
         success: true,
         message: "Profile updated successfully",
         data: updated,
       });
     } catch (error) {
+      console.error("updateProfile error:", error);
+      
+      if (error.name === 'NotFoundError') {
+        return res.status(404).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
+      if (error.name === 'ValidationError' || error.name === 'ConflictError') {
+        return res.status(400).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
       next(error);
     }
   }
@@ -128,6 +189,7 @@ export class UserController {
       const result = await this.userService.getAllTrainers(filters, page, limit);
       res.status(200).json({ success: true, data: result });
     } catch (error) {
+      console.error("getAllTrainers error:", error);
       next(error);
     }
   }
@@ -135,13 +197,30 @@ export class UserController {
   async deactivateTrainer(req, res, next) {
     try {
       const { id } = req.params;
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "Trainer ID is required"
+        });
+      }
+
       const trainer = await this.userService.deactivateTrainer(id);
+      
       res.status(200).json({
         success: true,
         message: "Trainer deactivated successfully",
         data: trainer,
       });
     } catch (error) {
+      console.error("deactivateTrainer error:", error);
+      
+      if (error.name === 'NotFoundError') {
+        return res.status(404).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
       next(error);
     }
   }
@@ -149,13 +228,30 @@ export class UserController {
   async activateTrainer(req, res, next) {
     try {
       const { id } = req.params;
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "Trainer ID is required"
+        });
+      }
+
       const trainer = await this.userService.activateTrainer(id);
+      
       res.status(200).json({
         success: true,
         message: "Trainer activated successfully",
         data: trainer,
       });
     } catch (error) {
+      console.error("activateTrainer error:", error);
+      
+      if (error.name === 'NotFoundError') {
+        return res.status(404).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
       next(error);
     }
   }
@@ -163,13 +259,23 @@ export class UserController {
   async bulkImport(req, res, next) {
     try {
       const { trainers } = req.body;
+      
+      if (!trainers || !Array.isArray(trainers) || trainers.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Trainers array is required and cannot be empty"
+        });
+      }
+
       const result = await this.userService.bulkImportTrainers(trainers);
+      
       res.status(200).json({
         success: true,
-        message: "Bulk import completed",
+        message: `Bulk import completed. Created: ${result.created}, Failed: ${result.failed}`,
         data: result,
       });
     } catch (error) {
+      console.error("bulkImport error:", error);
       next(error);
     }
   }
@@ -177,9 +283,22 @@ export class UserController {
   async searchTrainers(req, res, next) {
     try {
       const { q } = req.query;
-      const result = await this.userService.searchTrainers(q);
-      res.status(200).json({ success: true, data: result });
+      
+      if (!q || q.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: "Search query is required"
+        });
+      }
+
+      const result = await this.userService.searchTrainers(q.trim());
+      
+      res.status(200).json({ 
+        success: true, 
+        data: result 
+      });
     } catch (error) {
+      console.error("searchTrainers error:", error);
       next(error);
     }
   }
@@ -187,6 +306,14 @@ export class UserController {
   async getUsersCountByRole(req, res, next) {
     try {
       const { role } = req.query;
+      
+      if (!role) {
+        return res.status(400).json({
+          success: false,
+          message: "Role parameter is required"
+        });
+      }
+
       const count = await this.userService.getUsersCountByRole(role);
 
       res.json({
@@ -205,7 +332,7 @@ export class UserController {
       const count = await this.userService.getActiveTrainersCount();
 
       res.json({
-        success: true,
+        success: false,
         data: { count },
         message: 'Active trainers count fetched successfully'
       });

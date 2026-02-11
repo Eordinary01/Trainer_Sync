@@ -7,9 +7,13 @@ import { createTrainerValidation, validateRequest } from '../middleware/validato
 const usersRouter = express.Router();
 const userController = new UserController();
 
+// ============================================
 // ✅ IMPORTANT: Specific routes BEFORE parameterized routes
+// ============================================
 
-// Create trainer
+// ============================================
+// ✅ CREATE TRAINER (Now with category support)
+// ============================================
 usersRouter.post(
   '/',
   authenticate,
@@ -17,9 +21,14 @@ usersRouter.post(
   createTrainerValidation,
   validateRequest,
   (req, res, next) => userController.createTrainer(req, res, next)
+  // Note: Request body should include trainerCategory: "PERMANENT" or "CONTRACTED"
 );
 
-// Search trainers
+// ============================================
+// ✅ SEARCH & STATISTICS
+// ============================================
+
+// Search trainers by name/email/username
 usersRouter.get(
   '/search',
   authenticate,
@@ -42,6 +51,27 @@ usersRouter.get(
   (req, res, next) => userController.getActiveTrainersCount(req, res, next)
 );
 
+// ✅ NEW: Get trainers by category
+usersRouter.get(
+  '/category/:category',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.getTrainersByCategory(req, res, next)
+  // Params: category = "PERMANENT" or "CONTRACTED"
+);
+
+// ✅ NEW: Get leave statistics for all trainers
+usersRouter.get(
+  '/leaves/statistics/all',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.getAllTrainersLeaveStatistics(req, res, next)
+);
+
+// ============================================
+// ✅ BULK OPERATIONS
+// ============================================
+
 // Bulk import trainers
 usersRouter.post(
   '/bulk/import',
@@ -50,31 +80,66 @@ usersRouter.post(
   (req, res, next) => userController.bulkImport(req, res, next)
 );
 
-// ✅ Parameterized routes AFTER specific routes
+// ✅ NEW: Bulk update trainer category
+usersRouter.patch(
+  '/bulk/category',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.bulkUpdateCategory(req, res, next)
+  // Body: { trainerIds: [...], newCategory: "PERMANENT" or "CONTRACTED" }
+);
 
-// Get all trainers
+// ✅ NEW: Bulk trigger monthly leave increment
+usersRouter.post(
+  '/bulk/increment-monthly',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.bulkIncrementMonthlyLeaves(req, res, next)
+);
+
+// ✅ NEW: Bulk trigger year-end rollover
+usersRouter.post(
+  '/bulk/rollover',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.bulkRolloverLeaves(req, res, next)
+);
+
+// ============================================
+// ✅ PARAMETERIZED ROUTES (AFTER specific routes)
+// ============================================
+
+// Get all trainers (with filtering and pagination)
 usersRouter.get(
   '/',
   authenticate,
   authorize('ADMIN', 'HR'), 
   (req, res, next) => userController.getAllTrainers(req, res, next)
+  // Query params: page, limit, status, search
 );
 
-// Get profile by ID
+// Get user profile by ID
 usersRouter.get(
   '/:id',
   authenticate,
   (req, res, next) => userController.getProfile(req, res, next)
 );
 
-// Update profile by ID
+// Update user profile by ID
+// ✅ UPDATED: Now supports trainerCategory change
 usersRouter.put(
   '/:id',
   authenticate,
   (req, res, next) => userController.updateProfile(req, res, next)
+  // Body can include: trainerCategory, profile fields, etc.
+  // Note: Changing category will reinitialize leave balance
 );
 
-// Deactivate trainer - ✅ CHANGED TO PATCH
+// ============================================
+// ✅ TRAINER STATUS MANAGEMENT
+// ============================================
+
+// Deactivate trainer
 usersRouter.patch(
   '/:id/deactivate',
   authenticate,
@@ -82,12 +147,62 @@ usersRouter.patch(
   (req, res, next) => userController.deactivateTrainer(req, res, next)
 );
 
-// Activate trainer - ✅ CHANGED TO PATCH
+// Activate trainer
 usersRouter.patch(
   '/:id/activate',
   authenticate,
   authorize('ADMIN', 'HR'), 
   (req, res, next) => userController.activateTrainer(req, res, next)
+);
+
+// ============================================
+// ✅ NEW: LEAVE-RELATED USER ENDPOINTS
+// ============================================
+
+// Get trainer's leave balance
+usersRouter.get(
+  '/:id/leave-balance',
+  authenticate,
+  (req, res, next) => userController.getTrainerLeaveBalance(req, res, next)
+);
+
+// Get trainer's leave history
+usersRouter.get(
+  '/:id/leave-history',
+  authenticate,
+  (req, res, next) => userController.getTrainerLeaveHistory(req, res, next)
+);
+
+// Get trainer's leave statistics
+usersRouter.get(
+  '/:id/leave-statistics',
+  authenticate,
+  (req, res, next) => userController.getTrainerLeaveStatistics(req, res, next)
+);
+
+// Manually increment trainer's monthly leaves
+usersRouter.post(
+  '/:id/increment-monthly-leaves',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.incrementTrainerMonthlyLeaves(req, res, next)
+);
+
+// Manually rollover trainer's leaves
+usersRouter.post(
+  '/:id/rollover-leaves',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.rolloverTrainerLeaves(req, res, next)
+);
+
+// Edit trainer's leave balance directly
+usersRouter.patch(
+  '/:id/leave-balance',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => userController.editTrainerLeaveBalance(req, res, next)
+  // Body: { leaveType: "SICK", newBalance: 10, reason: "..." }
 );
 
 export default usersRouter;

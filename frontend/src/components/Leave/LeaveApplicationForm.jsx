@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../config/api.js";
+import { useAuth } from "../../hooks/useAuth.js"; // Add this import
 import {
   Info,
   AlertCircle,
@@ -8,6 +9,7 @@ import {
   Calendar,
   FileText,
   XCircle,
+  Lock,
 } from "lucide-react";
 
 // Constants for validation rules
@@ -24,14 +26,22 @@ const VALIDATION_RULES = {
 };
 
 export default function LeaveApplication() {
+  const { user } = useAuth(); // Get user from auth store
+  const navigate = useNavigate();
+
   const [leaveData, setLeaveData] = useState({
-    leaveType: "CASUAL",
+    leaveType: "",
     fromDate: "",
     toDate: "",
     reason: "",
   });
 
-  const [balance, setBalance] = useState({ sick: 0, casual: 0, paid: 0 });
+  const [balance, setBalance] = useState({
+    sick: { available: 0 },
+    casual: { available: 0 },
+    paid: { available: 0 },
+  });
+
   const [loading, setLoading] = useState(false);
   const [balanceLoading, setBalanceLoading] = useState(true);
   const [validationErrors, setValidationErrors] = useState({});
@@ -43,7 +53,15 @@ export default function LeaveApplication() {
   const [existingLeaves, setExistingLeaves] = useState([]);
   const [leaveCheckLoading, setLeaveCheckLoading] = useState(false);
 
-  const navigate = useNavigate();
+  // Helper to safely get balance value
+  const getBalanceValue = useCallback((type) => {
+    const balanceData = balance[type];
+    if (!balanceData) return 0;
+    if (typeof balanceData === 'object') {
+      return balanceData.available === Infinity ? Infinity : (balanceData.available || 0);
+    }
+    return balanceData === Infinity ? Infinity : (balanceData || 0);
+  }, [balance]);
 
   // Calculate word count
   const wordCount = useMemo(() => {
@@ -61,15 +79,66 @@ export default function LeaveApplication() {
     return Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
   }, [leaveData.fromDate, leaveData.toDate]);
 
-  // 📌 Fetch Leave Balance
+  // Check if user is a contracted trainer
+  const isContracted = useMemo(() => {
+    return user?.trainerCategory === "CONTRACTED";
+  }, [user]);
+
+  // Get available leave types based on trainer category
+  const availableLeaveTypes = useMemo(() => {
+    const baseTypes = [
+      { value: "CASUAL", label: "Casual Leave", color: "green" },
+      { value: "SICK", label: "Sick Leave", color: "blue" },
+      { value: "PAID", label: "Paid Leave", color: "purple" },
+    ];
+
+    if (isContracted) {
+      // Contracted trainers can only apply for paid leave
+      return baseTypes.filter(type => type.value === "PAID");
+    }
+    
+    // Permanent trainers can apply for all types
+    return baseTypes;
+  }, [isContracted]);
+
+  // Set default leave type based on available types
+  useEffect(() => {
+    if (availableLeaveTypes.length > 0 && !leaveData.leaveType) {
+      setLeaveData(prev => ({
+        ...prev,
+        leaveType: availableLeaveTypes[0].value
+      }));
+    }
+  }, [availableLeaveTypes, leaveData.leaveType]);
+
+  // 📌 Fetch Leave Balance (only balance, not user info)
   useEffect(() => {
     const fetchBalance = async () => {
       try {
+        setBalanceLoading(true);
         const res = await api.get("/leaves/balance");
-        setBalance(res.data.data || { sick: 0, casual: 0, paid: 0 });
+        const data = res.data.data || {
+          sick: { available: 0 },
+          casual: { available: 0 },
+          paid: { available: 0 },
+        };
+        
+        // Ensure each balance type has the proper structure
+        const formattedBalance = {
+          sick: typeof data.sick === 'object' ? data.sick : { available: data.sick || 0 },
+          casual: typeof data.casual === 'object' ? data.casual : { available: data.casual || 0 },
+          paid: typeof data.paid === 'object' ? data.paid : { available: data.paid || 0 },
+        };
+        
+        setBalance(formattedBalance);
       } catch (err) {
         console.error("Error fetching balance:", err);
-        setBalance({ sick: 0, casual: 0, paid: 0 });
+        // Set default structure on error
+        setBalance({
+          sick: { available: 0 },
+          casual: { available: 0 },
+          paid: { available: 0 },
+        });
       } finally {
         setBalanceLoading(false);
       }
@@ -83,7 +152,7 @@ export default function LeaveApplication() {
       try {
         setLeaveCheckLoading(true);
         const response = await api.get("/leaves/history?limit=100");
-        
+
         if (response.data.success) {
           // Handle different response structures
           let leaves = [];
@@ -92,7 +161,7 @@ export default function LeaveApplication() {
           } else if (Array.isArray(response.data.data)) {
             leaves = response.data.data;
           }
-          
+
           setExistingLeaves(leaves);
           console.log("Loaded existing leaves:", leaves.length);
         }
@@ -108,25 +177,28 @@ export default function LeaveApplication() {
   }, []);
 
   // Function to check for overlapping leaves
-  const checkForOverlappingLeaves = useCallback((leaves, newFromDate, newToDate) => {
-    if (!newFromDate || !newToDate || leaves.length === 0) return [];
-    
-    const newFrom = new Date(newFromDate);
-    const newTo = new Date(newToDate);
+  const checkForOverlappingLeaves = useCallback(
+    (leaves, newFromDate, newToDate) => {
+      if (!newFromDate || !newToDate || leaves.length === 0) return [];
 
-    return leaves.filter((leave) => {
-      // Skip rejected or cancelled leaves
-      if (leave.status === "REJECTED" || leave.status === "CANCELLED") {
-        return false;
-      }
+      const newFrom = new Date(newFromDate);
+      const newTo = new Date(newToDate);
 
-      const leaveFrom = new Date(leave.fromDate);
-      const leaveTo = new Date(leave.toDate);
+      return leaves.filter((leave) => {
+        // Skip rejected or cancelled leaves
+        if (leave.status === "REJECTED" || leave.status === "CANCELLED") {
+          return false;
+        }
 
-      // Check for overlap: new range overlaps with existing range
-      return newFrom <= leaveTo && newTo >= leaveFrom;
-    });
-  }, []);
+        const leaveFrom = new Date(leave.fromDate);
+        const leaveTo = new Date(leave.toDate);
+
+        // Check for overlap: new range overlaps with existing range
+        return newFrom <= leaveTo && newTo >= leaveFrom;
+      });
+    },
+    [],
+  );
 
   // Format overlapping leave message
   const formatOverlappingMessage = useCallback((overlappingLeaves) => {
@@ -178,15 +250,15 @@ export default function LeaveApplication() {
       } else if (dateDifference > VALIDATION_RULES.dateRange.maxDays) {
         errors.dateRange = `Maximum ${VALIDATION_RULES.dateRange.maxDays} days allowed per application`;
       }
-      
+
       // Check for overlapping leaves in real-time
       if (fromDate && toDate && existingLeaves.length > 0) {
         const overlappingLeaves = checkForOverlappingLeaves(
           existingLeaves,
           leaveData.fromDate,
-          leaveData.toDate
+          leaveData.toDate,
         );
-        
+
         if (overlappingLeaves.length > 0) {
           errors.overlapping = formatOverlappingMessage(overlappingLeaves);
         }
@@ -196,8 +268,8 @@ export default function LeaveApplication() {
     // Balance validation
     if (leaveData.leaveType && dateDifference > 0) {
       const leaveTypeKey = leaveData.leaveType.toLowerCase();
-      const availableBalance = balance[leaveTypeKey] || 0;
-      if (dateDifference > availableBalance) {
+      const availableBalance = getBalanceValue(leaveTypeKey);
+      if (availableBalance !== Infinity && dateDifference > availableBalance) {
         errors.balance = `Insufficient ${leaveData.leaveType} leave balance. Available: ${availableBalance} days, Required: ${dateDifference} days`;
       }
     }
@@ -220,38 +292,54 @@ export default function LeaveApplication() {
     }
 
     setValidationErrors(errors);
-  }, [leaveData, touched, balance, dateDifference, wordCount, existingLeaves, checkForOverlappingLeaves, formatOverlappingMessage]);
+  }, [
+    leaveData,
+    touched,
+    balance,
+    dateDifference,
+    wordCount,
+    existingLeaves,
+    checkForOverlappingLeaves,
+    formatOverlappingMessage,
+    getBalanceValue,
+  ]);
 
-  const handleChange = useCallback((e) => {
-    const { name, value } = e.target;
-    setLeaveData((prev) => ({ ...prev, [name]: value }));
-    
-    // Mark as touched when user interacts
-    if (!touched[name]) {
-      setTouched((prev) => ({ ...prev, [name]: true }));
-    }
-  }, [touched]);
+  const handleChange = useCallback(
+    (e) => {
+      const { name, value } = e.target;
+      setLeaveData((prev) => ({ ...prev, [name]: value }));
+
+      // Mark as touched when user interacts
+      if (!touched[name]) {
+        setTouched((prev) => ({ ...prev, [name]: true }));
+      }
+    },
+    [touched],
+  );
 
   const handleBlur = useCallback((field) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
   }, []);
 
   // Handle date change with immediate validation
-  const handleDateChange = useCallback((e) => {
-    const { name, value } = e.target;
-    setLeaveData((prev) => ({ ...prev, [name]: value }));
-    
-    // Immediately mark as touched for validation
-    setTouched((prev) => ({ ...prev, [name]: true }));
-    
-    // If toDate is being changed and fromDate exists, check for overlap immediately
-    if (name === 'toDate' && leaveData.fromDate) {
-      // Force immediate validation check
-      setTimeout(() => {
-        // This will trigger the useEffect validation
-      }, 0);
-    }
-  }, [leaveData.fromDate]);
+  const handleDateChange = useCallback(
+    (e) => {
+      const { name, value } = e.target;
+      setLeaveData((prev) => ({ ...prev, [name]: value }));
+
+      // Immediately mark as touched for validation
+      setTouched((prev) => ({ ...prev, [name]: true }));
+
+      // If toDate is being changed and fromDate exists, check for overlap immediately
+      if (name === "toDate" && leaveData.fromDate) {
+        // Force immediate validation check
+        setTimeout(() => {
+          // This will trigger the useEffect validation
+        }, 0);
+      }
+    },
+    [leaveData.fromDate],
+  );
 
   // 📌 Submit Leave
   const handleSubmit = async (e) => {
@@ -279,6 +367,12 @@ export default function LeaveApplication() {
     // Final validation
     if (!leaveData.fromDate || !leaveData.toDate || !leaveData.reason.trim()) {
       alert("Please fill in all required fields.");
+      return;
+    }
+
+    // Check if leave type is selected
+    if (!leaveData.leaveType) {
+      alert("Please select a leave type.");
       return;
     }
 
@@ -348,6 +442,7 @@ export default function LeaveApplication() {
 
   const isFormValid = useCallback(() => {
     return (
+      leaveData.leaveType &&
       leaveData.fromDate &&
       leaveData.toDate &&
       leaveData.reason.trim() &&
@@ -367,8 +462,29 @@ export default function LeaveApplication() {
   // Calculate available balance for selected leave type
   const availableBalance = useMemo(() => {
     const leaveTypeKey = leaveData.leaveType.toLowerCase();
-    return balance[leaveTypeKey] || 0;
-  }, [leaveData.leaveType, balance]);
+    return getBalanceValue(leaveTypeKey);
+  }, [leaveData.leaveType, getBalanceValue]);
+
+  // Get trainer category badge
+  const getTrainerCategoryBadge = () => {
+    if (!user?.trainerCategory) return null;
+
+    const config = {
+      PERMANENT: { color: "bg-green-100 text-green-800", label: "Permanent Trainer" },
+      CONTRACTED: { color: "bg-blue-100 text-blue-800", label: "Contracted Trainer" },
+    };
+
+    const { color, label } = config[user.trainerCategory] || {
+      color: "bg-gray-100 text-gray-800",
+      label: user.trainerCategory,
+    };
+
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-medium ${color}`}>
+        {label}
+      </span>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
@@ -389,9 +505,12 @@ export default function LeaveApplication() {
               <Info className="text-blue-600" size={22} />
             </div>
             <div className="flex-1">
-              <h3 className="font-bold text-blue-800 mb-3 text-lg">
-                Leave Application Guidelines
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-blue-800 text-lg">
+                  Leave Application Guidelines
+                </h3>
+                {getTrainerCategoryBadge()}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="flex items-center gap-2 text-sm text-blue-700">
                   <FileText size={14} className="text-blue-500" />
@@ -424,6 +543,16 @@ export default function LeaveApplication() {
                   <span>Leave balance checked automatically</span>
                 </div>
               </div>
+              {isContracted && (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-amber-700 text-sm">
+                    <Lock size={14} className="text-amber-600" />
+                    <span>
+                      <strong>Note for Contracted Trainers:</strong> You can only apply for Paid Leave. Sick and Casual leaves are not available for your category.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -465,12 +594,19 @@ export default function LeaveApplication() {
                   {["sick", "casual", "paid"].map((type) => (
                     <div
                       key={type}
-                      className={`text-center p-4 rounded-lg transition-all duration-300 ${
+                      className={`text-center p-4 rounded-lg transition-all duration-300 relative ${
                         leaveData.leaveType.toLowerCase() === type
                           ? "bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 shadow-md"
                           : "bg-white border border-gray-200 hover:border-gray-300"
+                      } ${
+                        isContracted && type !== "paid" ? "opacity-50 cursor-not-allowed" : ""
                       }`}
                     >
+                      {isContracted && type !== "paid" && (
+                        <div className="absolute top-2 right-2">
+                          <Lock className="w-4 h-4 text-gray-400" />
+                        </div>
+                      )}
                       <div
                         className={`text-3xl font-bold mb-1 ${
                           type === "sick"
@@ -478,9 +614,13 @@ export default function LeaveApplication() {
                             : type === "casual"
                               ? "text-green-600"
                               : "text-purple-600"
+                        } ${
+                          isContracted && type !== "paid" ? "text-gray-400" : ""
                         }`}
                       >
-                        {balance[type] || 0}
+                        {getBalanceValue(type) === Infinity
+                          ? "∞"
+                          : getBalanceValue(type)}
                       </div>
                       <div className="text-sm font-medium text-gray-600 uppercase tracking-wider">
                         {type} Leave
@@ -488,6 +628,11 @@ export default function LeaveApplication() {
                       {leaveData.leaveType.toLowerCase() === type && (
                         <div className="text-xs text-blue-600 font-medium mt-2">
                           Available for selection
+                        </div>
+                      )}
+                      {isContracted && type !== "paid" && (
+                        <div className="text-xs text-gray-500 font-medium mt-1">
+                          Not available
                         </div>
                       )}
                     </div>
@@ -519,12 +664,12 @@ export default function LeaveApplication() {
                       <button
                         onClick={() => {
                           // Clear dates on click
-                          setLeaveData(prev => ({
+                          setLeaveData((prev) => ({
                             ...prev,
-                            fromDate: '',
-                            toDate: ''
+                            fromDate: "",
+                            toDate: "",
                           }));
-                          setValidationErrors(prev => {
+                          setValidationErrors((prev) => {
                             const { overlapping, ...rest } = prev;
                             return rest;
                           });
@@ -555,7 +700,7 @@ export default function LeaveApplication() {
                       {validationErrors.balance}
                     </span>
                     <div className="text-sm text-red-600 mt-1">
-                      You have {availableBalance} {leaveData.leaveType} days
+                      You have {availableBalance === Infinity ? "Unlimited" : availableBalance} {leaveData.leaveType} days
                       remaining
                     </div>
                   </div>
@@ -571,11 +716,7 @@ export default function LeaveApplication() {
                   Leave Type
                 </label>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {[
-                    { value: "CASUAL", label: "Casual Leave", color: "green" },
-                    { value: "SICK", label: "Sick Leave", color: "blue" },
-                    { value: "PAID", label: "Paid Leave", color: "purple" },
-                  ].map((option) => (
+                  {availableLeaveTypes.map((option) => (
                     <button
                       key={option.value}
                       type="button"
@@ -586,30 +727,62 @@ export default function LeaveApplication() {
                         }));
                         setTouched((prev) => ({ ...prev, leaveType: true }));
                       }}
-                      className={`p-4 rounded-xl border-2 transition-all duration-300 ${
+                      className={`p-4 rounded-xl border-2 transition-all duration-300 relative ${
                         leaveData.leaveType === option.value
                           ? `border-${option.color}-500 bg-${option.color}-50`
                           : "border-gray-200 hover:border-gray-300 bg-white"
-                      }`}
+                      } ${isContracted && option.value !== "PAID" ? "opacity-60 cursor-not-allowed" : ""}`}
+                      disabled={isContracted && option.value !== "PAID"}
                     >
+                      {isContracted && option.value !== "PAID" && (
+                        <div className="absolute top-3 right-3">
+                          <Lock className="w-4 h-4 text-gray-400" />
+                        </div>
+                      )}
                       <div className="text-left">
                         <div
                           className={`font-bold text-lg ${
                             leaveData.leaveType === option.value
                               ? `text-${option.color}-700`
                               : "text-gray-700"
-                          }`}
+                          } ${isContracted && option.value !== "PAID" ? "text-gray-500" : ""}`}
                         >
                           {option.label}
                         </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                          Available: {balance[option.value.toLowerCase()] || 0}{" "}
-                          days
+                        <div className={`text-sm mt-1 ${isContracted && option.value !== "PAID" ? "text-gray-400" : "text-gray-500"}`}>
+                          Available: {getBalanceValue(option.value.toLowerCase())} days
                         </div>
+                        {isContracted && option.value !== "PAID" && (
+                          <div className="text-xs text-gray-500 mt-2 italic">
+                            Not available for contracted trainers
+                          </div>
+                        )}
                       </div>
                     </button>
                   ))}
+                  
+                  {/* Show message for contracted trainers if no leave types available */}
+                  {availableLeaveTypes.length === 0 && (
+                    <div className="col-span-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+                      <div className="flex items-center gap-3 text-red-700">
+                        <Lock size={20} className="text-red-500" />
+                        <div>
+                          <p className="font-medium">No Leave Types Available</p>
+                          <p className="text-sm">As a contracted trainer, you don't have access to any leave types. Please contact HR for assistance.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
+                
+                {/* Show note for contracted trainers */}
+                {isContracted && (
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-700">
+                      <strong>Note:</strong> As a <span className="font-semibold">Contracted Trainer</span>, you can only apply for <span className="font-semibold">Paid Leave</span>. Sick and Casual leaves are reserved for Permanent trainers only.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Date Range */}
@@ -627,7 +800,8 @@ export default function LeaveApplication() {
                       onBlur={() => handleBlur("fromDate")}
                       min={new Date().toISOString().split("T")[0]}
                       className={`w-full p-3.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
-                        validationErrors.fromDate || validationErrors.overlapping
+                        validationErrors.fromDate ||
+                        validationErrors.overlapping
                           ? "border-red-300 bg-red-50"
                           : touched.fromDate && !validationErrors.fromDate
                             ? "border-green-300 bg-green-50"
@@ -687,12 +861,14 @@ export default function LeaveApplication() {
                           {dateDifference !== 1 ? "s" : ""}
                         </p>
                       )}
-                    {leaveCheckLoading && leaveData.fromDate && leaveData.toDate && (
-                      <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
-                        Checking for existing leaves...
-                      </p>
-                    )}
+                    {leaveCheckLoading &&
+                      leaveData.fromDate &&
+                      leaveData.toDate && (
+                        <p className="mt-2 text-sm text-gray-500 flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
+                          Checking for existing leaves...
+                        </p>
+                      )}
                   </div>
                 </div>
               </div>
@@ -792,7 +968,9 @@ export default function LeaveApplication() {
                             ? "❌ Leave conflict detected"
                             : validationErrors.balance
                               ? "❌ Insufficient balance"
-                              : "Please complete all fields correctly"}
+                              : !leaveData.leaveType
+                                ? "❌ Please select a leave type"
+                                : "Please complete all fields correctly"}
                       </p>
                     </div>
                     <div className="text-right">
@@ -811,12 +989,12 @@ export default function LeaveApplication() {
                 <button
                   type="submit"
                   disabled={
-                    loading || !formValid || validationErrors.overlapping
+                    loading || !formValid || validationErrors.overlapping || !leaveData.leaveType
                   }
                   className={`w-full py-4 rounded-xl font-bold text-lg transition-all duration-300 ${
                     loading
                       ? "bg-blue-400 cursor-wait"
-                      : !formValid || validationErrors.overlapping
+                      : !formValid || validationErrors.overlapping || !leaveData.leaveType
                         ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                         : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                   }`}
@@ -828,6 +1006,8 @@ export default function LeaveApplication() {
                     </span>
                   ) : validationErrors.overlapping ? (
                     "❌ Cannot Submit (Leave Conflict)"
+                  ) : !leaveData.leaveType ? (
+                    "❌ Select Leave Type First"
                   ) : !formValid ? (
                     "Please Complete All Fields"
                   ) : (

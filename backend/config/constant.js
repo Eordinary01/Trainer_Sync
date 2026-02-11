@@ -5,11 +5,48 @@ export const ROLES = {
   HR: 'HR',
 };
 
+export const TRAINER_CATEGORY = {
+  PERMANENT: 'PERMANENT',
+  CONTRACTED: 'CONTRACTED',
+};
+
 export const LEAVE_TYPES = {
   SICK: 'SICK',
   CASUAL: 'CASUAL',
   PAID: 'PAID',
-  EMERGENCY: 'EMERGENCY', // ✅ ADD THIS if you want to support it
+ 
+};
+export const LEAVE_CONFIG = {
+  PERMANENT: {
+    initial: {
+      sick: 0,
+      casual: 0,
+      paid: Infinity, // Unlimited
+    },
+    monthlyIncrement: {
+      sick: 1,
+      casual: 1,
+      paid: 0, // No increment, already unlimited
+    },
+    allowedLeaveTypes: ['SICK', 'CASUAL', 'PAID'],
+    rolloverUnused: true,
+    rolloverMaxDays: null, // No limit on rollover
+  },
+  CONTRACTED: {
+    initial: {
+      sick: 0,      // Not applicable
+      casual: 0,    // Not applicable
+      paid: Infinity, // Unlimited
+    },
+    monthlyIncrement: {
+      sick: 0,
+      casual: 0,
+      paid: 0, // No increment, already unlimited
+    },
+    allowedLeaveTypes: ['PAID'],
+    rolloverUnused: false,
+    rolloverMaxDays: null,
+  },
 };
 
 export const LEAVE_STATUS = {
@@ -55,12 +92,7 @@ export const ATTENDANCE_STATUS = {
   INCOMPLETE: 'INCOMPLETE',
 };
 
-export const DEFAULT_LEAVE_BALANCE = {
-  SICK: 10,
-  CASUAL: 12,
-  PAID: 20,
-  EMERGENCY: 5, 
-};
+
 
 export const PASSWORD_RULES = {
   MIN_LENGTH: 8,

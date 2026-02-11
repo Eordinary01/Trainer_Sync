@@ -1,11 +1,31 @@
 import User from "../models/User.model.js";
-import { ValidationError, NotFoundError, ConflictError } from "../utils/errorHandler.js";
+import { LeaveService } from "./LeaveService.js";
+
+import {
+  ValidationError,
+  NotFoundError,
+  ConflictError,
+} from "../utils/errorHandler.js";
+import { TRAINER_CATEGORY } from "../config/constant.js";
+
+const leaveService = new LeaveService();
 
 export class UserService {
   async createTrainer(trainerData) {
     try {
+      // ✅ ADD: Validate trainer category
+      if (
+        !Object.values(TRAINER_CATEGORY).includes(trainerData.trainerCategory)
+      ) {
+        throw new ValidationError(
+          "Invalid trainer category. Must be PERMANENT or CONTRACTED",
+        );
+      }
+
       // Check if username already exists
-      const existingUser = await User.findOne({ username: trainerData.username });
+      const existingUser = await User.findOne({
+        username: trainerData.username,
+      });
       if (existingUser) {
         throw new ConflictError("Username already exists");
       }
@@ -18,6 +38,13 @@ export class UserService {
 
       const trainer = new User(trainerData);
       await trainer.save();
+
+      // ✅ ADD: Initialize leave balance based on category
+      await leaveService.initializeLeaveBalance(
+        trainer._id,
+        trainerData.trainerCategory || "PERMANENT",
+      );
+
       return trainer;
     } catch (error) {
       throw error;
@@ -64,7 +91,11 @@ export class UserService {
       }
 
       if (updates.status) {
-        if (!["ACTIVE", "INACTIVE", "ON_LEAVE", "SUSPENDED"].includes(updates.status)) {
+        if (
+          !["ACTIVE", "INACTIVE", "ON_LEAVE", "SUSPENDED"].includes(
+            updates.status,
+          )
+        ) {
           throw new ValidationError("Invalid status");
         }
         user.status = updates.status;
@@ -73,25 +104,59 @@ export class UserService {
       // Update profile fields (only if provided)
       if (updates.profile) {
         // Update each profile field only if it's provided in the update
-        if (updates.profile.firstName !== undefined) user.profile.firstName = updates.profile.firstName;
-        if (updates.profile.lastName !== undefined) user.profile.lastName = updates.profile.lastName;
-        if (updates.profile.phone !== undefined) user.profile.phone = updates.profile.phone;
-        if (updates.profile.dateOfBirth !== undefined) user.profile.dateOfBirth = updates.profile.dateOfBirth;
-        if (updates.profile.gender !== undefined) user.profile.gender = updates.profile.gender;
-        if (updates.profile.address !== undefined) user.profile.address = updates.profile.address;
-        if (updates.profile.city !== undefined) user.profile.city = updates.profile.city;
-        if (updates.profile.state !== undefined) user.profile.state = updates.profile.state;
-        if (updates.profile.zipCode !== undefined) user.profile.zipCode = updates.profile.zipCode;
-        if (updates.profile.country !== undefined) user.profile.country = updates.profile.country;
-        if (updates.profile.employeeId !== undefined) user.profile.employeeId = updates.profile.employeeId;
-        if (updates.profile.department !== undefined) user.profile.department = updates.profile.department;
-        if (updates.profile.designation !== undefined) user.profile.designation = updates.profile.designation;
-        if (updates.profile.qualification !== undefined) user.profile.qualification = updates.profile.qualification;
-        if (updates.profile.experience !== undefined) user.profile.experience = updates.profile.experience;
-        if (updates.profile.bio !== undefined) user.profile.bio = updates.profile.bio;
-        if (updates.profile.joiningDate !== undefined) user.profile.joiningDate = updates.profile.joiningDate;
+        if (updates.profile.firstName !== undefined)
+          user.profile.firstName = updates.profile.firstName;
+        if (updates.profile.lastName !== undefined)
+          user.profile.lastName = updates.profile.lastName;
+        if (updates.profile.phone !== undefined)
+          user.profile.phone = updates.profile.phone;
+        if (updates.profile.dateOfBirth !== undefined)
+          user.profile.dateOfBirth = updates.profile.dateOfBirth;
+        if (updates.profile.gender !== undefined)
+          user.profile.gender = updates.profile.gender;
+        if (updates.profile.address !== undefined)
+          user.profile.address = updates.profile.address;
+        if (updates.profile.city !== undefined)
+          user.profile.city = updates.profile.city;
+        if (updates.profile.state !== undefined)
+          user.profile.state = updates.profile.state;
+        if (updates.profile.zipCode !== undefined)
+          user.profile.zipCode = updates.profile.zipCode;
+        if (updates.profile.country !== undefined)
+          user.profile.country = updates.profile.country;
+        if (updates.profile.employeeId !== undefined)
+          user.profile.employeeId = updates.profile.employeeId;
+        if (updates.profile.department !== undefined)
+          user.profile.department = updates.profile.department;
+        if (updates.profile.designation !== undefined)
+          user.profile.designation = updates.profile.designation;
+        if (updates.profile.qualification !== undefined)
+          user.profile.qualification = updates.profile.qualification;
+        if (updates.profile.experience !== undefined)
+          user.profile.experience = updates.profile.experience;
+        if (updates.profile.bio !== undefined)
+          user.profile.bio = updates.profile.bio;
+        if (updates.profile.joiningDate !== undefined)
+          user.profile.joiningDate = updates.profile.joiningDate;
       }
 
+      if (
+        updates.trainerCategory &&
+        updates.trainerCategory !== user.trainerCategory
+      ) {
+        const validCategories = Object.values(TRAINER_CATEGORY);
+        if (!validCategories.includes(updates.trainerCategory)) {
+          throw new ValidationError("Invalid trainer category");
+        }
+
+        user.trainerCategory = updates.trainerCategory;
+
+        // Re-initialize leave balance for new category
+        await leaveService.initializeLeaveBalance(
+          userId,
+          updates.trainerCategory,
+        );
+      }
       // Update client information if provided
       if (updates.client) {
         user.profile.client = {
@@ -159,7 +224,7 @@ export class UserService {
       const trainer = await User.findByIdAndUpdate(
         trainerId,
         { status: "INACTIVE" },
-        { new: true, runValidators: false } // ✅ Skip validation to avoid joiningDate error
+        { new: true, runValidators: false }, // ✅ Skip validation to avoid joiningDate error
       ).select("-password");
 
       if (!trainer) {
@@ -177,7 +242,7 @@ export class UserService {
       const trainer = await User.findByIdAndUpdate(
         trainerId,
         { status: "ACTIVE" },
-        { new: true, runValidators: false } // ✅ Skip validation to avoid joiningDate error
+        { new: true, runValidators: false }, // ✅ Skip validation to avoid joiningDate error
       ).select("-password");
 
       if (!trainer) {
@@ -202,7 +267,7 @@ export class UserService {
             { "profile.lastName": { $regex: searchTerm, $options: "i" } },
           ],
         },
-        "-password"
+        "-password",
       ).limit(10);
 
       return trainers;

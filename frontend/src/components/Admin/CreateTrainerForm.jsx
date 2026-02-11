@@ -7,12 +7,13 @@ export const CreateTrainerForm = ({ onSuccess }) => {
   const [formData, setFormData] = useState({
     username: '',
     email: '',
+    trainerCategory: 'PERMANENT', // ✅ Added trainer category
     profile: {
       firstName: '',
       lastName: '',
       phone: '',
       employeeId: '',
-      joiningDate: '', 
+      joiningDate: '',
       client: {
         name: '',
         address: '',
@@ -62,9 +63,15 @@ export const CreateTrainerForm = ({ onSuccess }) => {
     setSuccess('');
     setLoading(true);
 
-    // Validate required fields
+    // ✅ Validate required fields
     if (!formData.profile.joiningDate) {
       setError('Joining date is required');
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.trainerCategory) {
+      setError('Trainer category is required');
       setLoading(false);
       return;
     }
@@ -79,12 +86,13 @@ export const CreateTrainerForm = ({ onSuccess }) => {
         setFormData({
           username: '',
           email: '',
+          trainerCategory: 'PERMANENT', // ✅ Reset to default
           profile: {
             firstName: '',
             lastName: '',
             phone: '',
             employeeId: '',
-            joiningDate: '', // Reset this too
+            joiningDate: '',
             client: {
               name: '',
               address: '',
@@ -99,7 +107,13 @@ export const CreateTrainerForm = ({ onSuccess }) => {
       }
 
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data?.error?.message || err.message || 'Failed to create trainer');
+      console.error('Error creating trainer:', err);
+      setError(
+        err.response?.data?.message || 
+        err.response?.data?.error?.message || 
+        err.message || 
+        'Failed to create trainer'
+      );
     } finally {
       setLoading(false);
     }
@@ -163,6 +177,44 @@ export const CreateTrainerForm = ({ onSuccess }) => {
             placeholder="e.g., john@company.com"
             disabled={loading}
           />
+        </div>
+
+        {/* Trainer Category */}
+        <div className="mb-6">
+          <label className="block text-gray-700 font-semibold mb-2">
+            Trainer Category *
+          </label>
+          <div className="flex space-x-4">
+            <label className="inline-flex items-center">
+              <input
+                type="radio"
+                name="trainerCategory"
+                value="PERMANENT"
+                checked={formData.trainerCategory === 'PERMANENT'}
+                onChange={handleChange}
+                className="form-radio h-4 w-4 text-blue-600"
+                disabled={loading}
+              />
+              <span className="ml-2 text-gray-700">Permanent</span>
+              <span className="ml-2 text-sm text-gray-500">(Gets monthly leave increments)</span>
+            </label>
+            <label className="inline-flex items-center">
+              <input
+                type="radio"
+                name="trainerCategory"
+                value="CONTRACTED"
+                checked={formData.trainerCategory === 'CONTRACTED'}
+                onChange={handleChange}
+                className="form-radio h-4 w-4 text-blue-600"
+                disabled={loading}
+              />
+              <span className="ml-2 text-gray-700">Contracted</span>
+              <span className="ml-2 text-sm text-gray-500">(Fixed leave balance)</span>
+            </label>
+          </div>
+          <p className="mt-2 text-sm text-gray-500">
+            Permanent trainers receive monthly leave increments, while contracted trainers have a fixed leave balance.
+          </p>
         </div>
 
         {/* First Name */}
@@ -233,7 +285,7 @@ export const CreateTrainerForm = ({ onSuccess }) => {
           />
         </div>
 
-        {/* Joining Date - ADD THIS FIELD */}
+        {/* Joining Date */}
         <div className="mb-4">
           <label className="block text-gray-700 font-semibold mb-2">
             Joining Date *
@@ -250,7 +302,7 @@ export const CreateTrainerForm = ({ onSuccess }) => {
         </div>
 
         {/* Client Section */}
-        <div className="border-t pt-4 mb-4">
+        <div className="border-t pt-4 mb-6">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Client Information (Optional)</h3>
           
           {/* Client Name */}
@@ -316,6 +368,11 @@ export const CreateTrainerForm = ({ onSuccess }) => {
         <p className="text-sm text-blue-800">
           <strong>ℹ️ Note:</strong> A temporary password will be automatically generated and sent to the trainer's email.
           They will be asked to change it on first login.
+        </p>
+        <p className="text-sm text-blue-800 mt-2">
+          <strong>Leave Policy:</strong> 
+          <span className="font-semibold ml-1">Permanent trainers</span> receive monthly leave increments, 
+          while <span className="font-semibold">contracted trainers</span> have a fixed leave balance as per company policy.
         </p>
       </div>
     </div>

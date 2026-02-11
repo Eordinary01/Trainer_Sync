@@ -28,13 +28,19 @@ const userSchema = new Schema(
     },
     isFirstLogin: {
       type: Boolean,
-      default: true, // ✅ New users must change password after first login
+      default: true,
     },
     role: {
       type: String,
       enum: ["ADMIN", "HR", "TRAINER"],
       default: "TRAINER",
     },
+    trainerCategory: {
+      type: String,
+      enum: ["PERMANENT", "CONTRACTED"],
+      default: "PERMANENT",
+    },
+
     profile: {
       firstName: {
         type: String,
@@ -69,7 +75,7 @@ const userSchema = new Schema(
       bio: String,
       joiningDate: {
         type: Date,
-        // ✅ NOT required here - will be set during creation
+        default: Date.now,
       },
       skills: [String],
       client: {
@@ -97,26 +103,206 @@ const userSchema = new Schema(
         ref: "User",
       },
     ],
+    
+    // ✅ FIXED: Proper leave balance structure
     leaveBalance: {
-      sick: { type: Number, default: 10 },
-      casual: { type: Number, default: 12 },
-      paid: { type: Number, default: 20 },
-      lastUpdated: { type: Date, default: Date.now },
+      sick: {
+        available: { 
+          type: Number, 
+          default: 0,
+          min: 0
+        },
+        used: { 
+          type: Number, 
+          default: 0,
+          min: 0 
+        },
+        carryForward: { 
+          type: Number, 
+          default: 0,
+          min: 0 
+        },
+      },
+      casual: {
+        available: { 
+          type: Number, 
+          default: 0,
+          min: 0
+        },
+        used: { 
+          type: Number, 
+          default: 0,
+          min: 0 
+        },
+        carryForward: { 
+          type: Number, 
+          default: 0,
+          min: 0 
+        },
+      },
+      paid: {
+        available: { 
+          type: Number, 
+          default: 9999,
+          min: 0
+        },
+        used: { 
+          type: Number, 
+          default: 0,
+          min: 0 
+        },
+        carryForward: { 
+          type: Number, 
+          default: 0,
+          min: 0 
+        },
+      },
+      lastUpdated: { 
+        type: Date,
+        default: Date.now
+      },
+      lastIncrementDate: { 
+        type: Date,
+        default: Date.now  // Will be current date for new trainers
+      },
+      lastRolloverDate: { 
+        type: Date 
+      },
     },
+    
+    leaveHistory: [
+      {
+        type: {
+          type: String,
+          enum: [
+            "TEST_AUTO_INCREMENT",
+            "SYSTEM_INIT", 
+            "AUTO_INCREMENT",
+            "USED",
+            "APPROVED", 
+            "REJECTED", 
+            "ADMIN_EDIT",
+            "ROLLOVER",
+            "RESTORED", 
+            "CANCELLED",
+          ],
+        },
+        leaveType: {
+          type: String,
+          enum: ["SICK", "CASUAL", "PAID", "ALL", "MIXED"]
+        },
+        previousBalance: Schema.Types.Mixed,
+        newBalance: Schema.Types.Mixed,
+        daysAffected: Number,
+        modifiedBy: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+        },
+        date: { 
+          type: Date, 
+          default: Date.now 
+        },
+        reason: String,
+      },
+    ],
+    
     status: {
       type: String,
       enum: ["ACTIVE", "INACTIVE", "ON_LEAVE", "SUSPENDED"],
       default: "ACTIVE",
     },
-    loginAttempts: { type: Number, default: 0 },
+    
+    loginAttempts: { 
+      type: Number, 
+      default: 0 
+    },
     lockUntil: Date,
     passwordResetToken: String,
     passwordResetExpire: Date,
-    emailVerified: { type: Boolean, default: false },
+    emailVerified: { 
+      type: Boolean, 
+      default: false 
+    },
     deletedAt: Date,
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    toJSON: { 
+      virtuals: true,
+      transform: function(doc, ret) {
+        if (ret.leaveBalance && ret.leaveBalance.paid && ret.leaveBalance.paid.available >= 9999) {
+          ret.leaveBalance.paid.available = "Unlimited";
+        }
+        return ret;
+      }
+    }
+  },
 );
+
+// ✅ FIXED: CORRECTED pre('validate') hook
+userSchema.pre("validate", function(next) {
+  // 1. Role-category validation
+  if (this.role !== "TRAINER" && this.trainerCategory) {
+    this.trainerCategory = undefined;
+  }
+  
+  if (["ADMIN", "HR"].includes(this.role) && this.trainerCategory) {
+    const error = new Error("ADMIN/HR users cannot have trainerCategory");
+    return next(error);
+  }
+  
+  // 2. Initialize leave balance for new TRAINER users
+  if (this.role === "TRAINER" && this.isNew) {
+    console.log(`🚀 Initializing leave balance for new ${this.trainerCategory} trainer`);
+    
+    // ✅ FIXED: New trainers start with ZERO sick/casual leaves
+    // They get leaves AFTER 30 days of work (through auto-increment)
+    if (this.trainerCategory === "PERMANENT") {
+      // Set lastIncrementDate to CURRENT DATE (not 30 days ago)
+      // This means they need to work 30 days before first increment
+      this.leaveBalance = {
+        sick: { available: 0, used: 0, carryForward: 0 }, // ✅ Start with 0
+        casual: { available: 0, used: 0, carryForward: 0 }, // ✅ Start with 0
+        paid: { available: 9999, used: 0, carryForward: 0 },
+        lastIncrementDate: new Date(), // ✅ Current date - will be incremented after 30 days
+        lastUpdated: new Date(),
+        lastRolloverDate: null
+      };
+      
+      console.log(`📊 New PERMANENT trainer: 0 sick, 0 casual leaves`);
+      console.log(`📅 First increment will be after 30 days from: ${new Date()}`);
+      
+    } else if (this.trainerCategory === "CONTRACTED") {
+      // Contracted trainers only get paid leave
+      this.leaveBalance = {
+        sick: { available: 0, used: 0, carryForward: 0 },
+        casual: { available: 0, used: 0, carryForward: 0 },
+        paid: { available: 9999, used: 0, carryForward: 0 },
+        lastUpdated: new Date(),
+        lastRolloverDate: null
+      };
+    }
+    
+    // Initialize leave history
+    if (!this.leaveHistory || this.leaveHistory.length === 0) {
+      this.leaveHistory = [{
+        type: "SYSTEM_INIT",
+        leaveType: "ALL",
+        previousBalance: 0,
+        newBalance: 0,
+        daysAffected: 0,
+        modifiedBy: this.createdBy || null,
+        date: new Date(),
+        reason: `Initial leave balance for ${this.trainerCategory} trainer - Starts with 0 leaves`
+      }];
+    }
+  }
+  
+  next();
+});
+
+// ✅ FIXED: Also need to update the auto-increment eligibility logic
+// in the service/controller to handle this correctly
 
 // Custom validation to ensure only one ADMIN exists
 userSchema.pre("save", async function (next) {
@@ -130,8 +316,8 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-// ✅ Ensure joiningDate is set on creation
-userSchema.pre("save", async function (next) {
+// Ensure joiningDate is set on creation
+userSchema.pre("save", function (next) {
   if (this.isNew && !this.profile.joiningDate) {
     this.profile.joiningDate = new Date();
   }
@@ -162,50 +348,192 @@ userSchema.methods.isLocked = function () {
 
 // Increment login attempts
 userSchema.methods.incLoginAttempts = async function () {
-  // If lock has expired, reset attempts
   if (this.lockUntil && this.lockUntil < Date.now()) {
     this.loginAttempts = 1;
     this.lockUntil = undefined;
   } else {
     this.loginAttempts += 1;
   }
-  
-  // Lock account after 5 failed attempts
+
   if (this.loginAttempts >= 5) {
-    this.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    this.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
   }
-  
-  // ✅ FIX: Use save() instead of updateOne()
+
   return this.save();
 };
 
 userSchema.methods.resetLoginAttempts = async function () {
   this.loginAttempts = 0;
   this.lockUntil = undefined;
-  
-
   return this.save();
 };
 
-// Get public profile (exclude sensitive fields)
+// Get public profile
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
+  
   delete obj.password;
   delete obj.passwordResetToken;
   delete obj.passwordResetExpire;
   delete obj.loginAttempts;
   delete obj.lockUntil;
+  
+  if (obj.leaveBalance && obj.leaveBalance.paid) {
+    obj.leaveBalance.paid.available = 
+      obj.leaveBalance.paid.available >= 9999 ? "Unlimited" : obj.leaveBalance.paid.available;
+  }
+  
   return obj;
+};
+
+// ✅ FIXED: Helper method to check if user is eligible for auto-increment
+userSchema.methods.canAutoIncrement = function() {
+  if (this.role !== "TRAINER") return false;
+  if (this.trainerCategory !== "PERMANENT") return false;
+  if (this.status !== "ACTIVE") return false;
+  return true;
+};
+
+// ✅ FIXED: Method to check if user can receive monthly increment
+userSchema.methods.isEligibleForIncrement = function() {
+  if (!this.canAutoIncrement()) return false;
+  
+  if (!this.leaveBalance || !this.leaveBalance.lastIncrementDate) {
+    return false; // New trainer needs to wait
+  }
+  
+  const now = new Date();
+  const lastIncrement = new Date(this.leaveBalance.lastIncrementDate);
+  const daysSinceLastIncrement = Math.floor(
+    (now - lastIncrement) / (1000 * 60 * 60 * 24)
+  );
+  
+  return daysSinceLastIncrement >= 30;
+};
+
+// Helper method to get available leave days
+userSchema.methods.getAvailableLeave = function(leaveType) {
+  if (!this.leaveBalance || !this.leaveBalance[leaveType]) {
+    return 0;
+  }
+  
+  const balance = this.leaveBalance[leaveType];
+  if (leaveType === 'paid' && balance.available >= 9999) {
+    return "Unlimited";
+  }
+  
+  return balance.available;
+};
+
+// Method to get days until next increment
+userSchema.methods.getDaysUntilNextIncrement = function() {
+  if (!this.canAutoIncrement() || !this.leaveBalance || !this.leaveBalance.lastIncrementDate) {
+    return 30; // New trainer has 30 days to wait
+  }
+  
+  const now = new Date();
+  const lastIncrement = new Date(this.leaveBalance.lastIncrementDate);
+  const daysSinceLastIncrement = Math.floor(
+    (now - lastIncrement) / (1000 * 60 * 60 * 24)
+  );
+  
+  return Math.max(0, 30 - daysSinceLastIncrement);
+};
+
+// Method to increment leaves
+userSchema.methods.incrementLeaves = async function() {
+  if (!this.canAutoIncrement()) {
+    throw new Error("User is not eligible for leave increment");
+  }
+  
+  const currentCasual = Number(this.leaveBalance.casual?.available) || 0;
+  const currentSick = Number(this.leaveBalance.sick?.available) || 0;
+  
+  this.leaveBalance.casual.available = currentCasual + 1;
+  this.leaveBalance.sick.available = currentSick + 1;
+  this.leaveBalance.lastIncrementDate = new Date();
+  this.leaveBalance.lastUpdated = new Date();
+  
+  this.leaveHistory.push({
+    type: "AUTO_INCREMENT",
+    leaveType: "ALL",
+    previousBalance: { casual: currentCasual, sick: currentSick },
+    newBalance: { 
+      casual: currentCasual + 1, 
+      sick: currentSick + 1 
+    },
+    daysAffected: 0,
+    modifiedBy: null,
+    date: new Date(),
+    reason: "Monthly auto-increment"
+  });
+  
+  return this.save();
+};
+
+// Static method to get all permanent trainers eligible for increment
+userSchema.statics.getEligibleTrainersForIncrement = function() {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  
+  return this.find({ 
+    role: "TRAINER", 
+    trainerCategory: "PERMANENT", 
+    status: "ACTIVE",
+    'leaveBalance.lastIncrementDate': { $lte: thirtyDaysAgo }
+  });
+};
+
+// Static method to get all permanent trainers
+userSchema.statics.getPermanentTrainers = function() {
+  return this.find({ 
+    role: "TRAINER", 
+    trainerCategory: "PERMANENT", 
+    status: "ACTIVE" 
+  });
+};
+
+// Static method to get all contracted trainers
+userSchema.statics.getContractedTrainers = function() {
+  return this.find({ 
+    role: "TRAINER", 
+    trainerCategory: "CONTRACTED", 
+    status: "ACTIVE" 
+  });
+};
+
+// Static method to fix all permanent trainers' lastIncrementDate (if needed for testing)
+userSchema.statics.setTrainersEligibleForIncrement = async function() {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  
+  const result = await this.updateMany(
+    {
+      role: "TRAINER",
+      trainerCategory: "PERMANENT",
+      status: "ACTIVE"
+    },
+    {
+      $set: {
+        'leaveBalance.lastIncrementDate': thirtyDaysAgo
+      }
+    }
+  );
+  
+  console.log(`✅ Set ${result.modifiedCount} permanent trainers as eligible for increment`);
+  return result;
 };
 
 // Create indexes
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
-userSchema.index({ role: 1 });
+userSchema.index({ trainerCategory: 1 });
+userSchema.index({ role: 1, trainerCategory: 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ reportingManager: 1 });
-userSchema.index({ createdBy: 1 }); // Added index for createdBy
+userSchema.index({ createdBy: 1 });
 userSchema.index({ createdAt: -1 });
+userSchema.index({ 'leaveBalance.lastIncrementDate': 1 });
 
 // Static method to get the single admin
 userSchema.statics.getAdmin = function () {
