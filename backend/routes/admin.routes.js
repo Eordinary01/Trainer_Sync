@@ -12,9 +12,9 @@ const emailService = new EmailService();
 
 router.post(
   '/create-admin',
-  authenticate,                    // User must be logged in
-  authorize('ADMIN'),              // User must be ADMIN role
-  createAdminValidation,           // Validate input
+  authenticate,
+  authorize('ADMIN'),
+  createAdminValidation,
   validateRequest,
   async (req, res, next) => {
     try {
@@ -50,8 +50,8 @@ router.post(
       const newUser = new User({
         username,
         email,
-        password, // Will be hashed by pre-save middleware
-        role, // ADMIN or HR (from request, but admin controls this)
+        password,
+        role,
         profile: {
           firstName: profile?.firstName || '',
           lastName: profile?.lastName || '',
@@ -60,11 +60,8 @@ router.post(
           joiningDate: new Date(),
         },
         status: 'ACTIVE',
-        leaveBalance: {
-          sick: 10,
-          casual: 12,
-          paid: 20,
-        }
+        // ✅ HR-SPECIFIC: Leave balance handled in pre('validate') hook
+        // No need to set leaveBalance here - model handles it
       });
 
       await newUser.save();
@@ -78,7 +75,6 @@ router.post(
         );
       } catch (emailError) {
         console.error('Failed to send welcome email:', emailError);
-        // Don't fail the whole request if email fails
       }
 
       res.status(201).json({
@@ -91,6 +87,9 @@ router.post(
           role: newUser.role,
           profile: newUser.profile,
           status: newUser.status,
+          // ✅ HR-SPECIFIC: Include leave balance with unlimited flag
+          leaveBalance: newUser.leaveBalance,
+          isUnlimited: true
         }
       });
 

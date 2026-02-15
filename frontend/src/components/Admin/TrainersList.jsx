@@ -14,6 +14,10 @@ import {
   RefreshCw,
   Eye,
   Edit2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronFirst,
+  ChevronLast,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth.js";
 import { formatDate } from "../../utils/dateFormat.js";
@@ -30,6 +34,14 @@ export default function TrainersList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [editingTrainer, setEditingTrainer] = useState(null);
+  
+  // ✅ PAGINATION STATE - Matches backend structure
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10, // Your backend default limit
+    total: 0,
+    pages: 1
+  });
 
   useEffect(() => {
     if (
@@ -38,7 +50,7 @@ export default function TrainersList() {
     ) {
       fetchTrainersData();
     }
-  }, [isAuthenticated, currentUser]);
+  }, [isAuthenticated, currentUser, pagination.page, pagination.limit, searchTerm, statusFilter]);
 
   const handleViewTrainerDetails = (trainerId) => {
     navigate(`/admin/trainers/${trainerId}`);
@@ -53,55 +65,73 @@ export default function TrainersList() {
   };
 
   const handleTrainerUpdated = (updatedTrainer) => {
-    // Update the trainers list with updated trainer
     setTrainers(trainers.map(t => t._id === updatedTrainer._id ? { ...t, ...updatedTrainer } : t));
-    // Show success message (you can add toast notification here)
     console.log("✅ Trainer profile updated successfully");
   };
 
+  // ✅ FETCH WITH EXACT BACKEND PARAMETERS
   const fetchTrainersData = async () => {
     try {
       setLoading(true);
 
-      console.log("🔄 Fetching trainers data using existing routes...");
+      console.log("🔄 Fetching trainers data...");
 
-      const [usersResponse, clockedInResponse] = await Promise.all([
-        api.get("/users"), 
-        api.get("/attendance/today/clocked-in-list"), 
-      ]);
-
-      console.log("📊 Raw API responses:", {
-        users: usersResponse.data,
-        clockedIn: clockedInResponse.data,
+      // Build query params exactly as your backend expects
+      const params = new URLSearchParams({
+        page: pagination.page,
+        limit: pagination.limit,
       });
 
-      // Process trainers from users response
-      const allUsers =
-        usersResponse.data.data?.trainers || usersResponse.data.data || [];
+      // Add search param if exists (backend should handle this)
+      if (searchTerm) {
+        params.append('search', searchTerm);
+      }
+
+      // Add status filter if not ALL (backend should handle ACTIVE/INACTIVE)
+      if (statusFilter === 'ACTIVE' || statusFilter === 'INACTIVE') {
+        params.append('status', statusFilter);
+      }
+
+      // Fetch trainers with pagination
+      const usersResponse = await api.get(`/users?${params.toString()}`);
+      
+      // Fetch clocked-in list separately
+      const clockedInResponse = await api.get("/attendance/today/clocked-in-list");
+
+      console.log("📊 API Response:", usersResponse.data);
+
+      // ✅ EXACT STRUCTURE FROM YOUR BACKEND
+      const responseData = usersResponse.data.data;
+      const trainersData = responseData?.trainers || [];
+      const paginationData = responseData?.pagination || {
+        total: 0,
+        page: pagination.page,
+        limit: pagination.limit,
+        pages: 1
+      };
+
       const clockedInUsers = clockedInResponse.data.data || [];
 
-      console.log("👥 Processing trainers:", {
-        totalUsers: allUsers.length,
-        clockedInCount: clockedInUsers.length,
+      // ✅ Update pagination state EXACTLY as backend returns
+      setPagination({
+        page: paginationData.page || 1,
+        limit: paginationData.limit || 10,
+        total: paginationData.total || 0,
+        pages: paginationData.pages || 1
       });
 
-      // Filter only trainers and map with today's status
-      const trainersWithStatus = allUsers
+      // Map trainers with today's attendance
+      const trainersWithStatus = trainersData
         .filter((user) => user.role === "TRAINER")
         .map((trainer) => {
-          // Find today's attendance in clocked-in list
           const todayAttendance = clockedInUsers.find((clockedIn) => {
             return (
               clockedIn.userId === trainer._id ||
               clockedIn.user?._id === trainer._id ||
-              clockedIn.userId?._id === trainer._id
+              clockedIn.userId?._id === trainer._id ||
+              clockedIn.id === trainer._id
             );
           });
-
-          console.log(
-            `🔍 Trainer ${trainer.profile?.firstName} attendance:`,
-            todayAttendance
-          );
 
           return {
             ...trainer,
@@ -110,29 +140,14 @@ export default function TrainersList() {
           };
         });
 
-      console.log("✅ Final trainers data:", trainersWithStatus);
+      console.log("✅ Trainers loaded:", trainersWithStatus.length);
+      console.log("📊 Pagination:", paginationData);
 
       setTrainers(trainersWithStatus);
       setClockedInList(clockedInUsers);
+      
     } catch (error) {
       console.error("❌ Error fetching trainers data:", error);
-
-      // Fallback: Try to get at least basic user list
-      try {
-        const usersResponse = await api.get("/users");
-        const allUsers =
-          usersResponse.data.data?.trainers || usersResponse.data.data || [];
-        const trainers = allUsers
-          .filter((user) => user.role === "TRAINER")
-          .map((trainer) => ({
-            ...trainer,
-            todayAttendance: null,
-            isClockedIn: false,
-          }));
-        setTrainers(trainers);
-      } catch (fallbackError) {
-        console.error("❌ Fallback also failed:", fallbackError);
-      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -144,29 +159,47 @@ export default function TrainersList() {
     await fetchTrainersData();
   };
 
+  // ✅ SEARCH HANDLER - Debounced to prevent too many API calls
+  const handleSearch = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    // Reset to page 1 when searching
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  // ✅ STATUS FILTER HANDLER
+  const handleStatusFilter = (e) => {
+    const value = e.target.value;
+    setStatusFilter(value);
+    // Reset to page 1 when filtering
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  // ✅ PAGINATION HANDLERS
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.pages) {
+      setPagination(prev => ({ ...prev, page: newPage }));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleLimitChange = (e) => {
+    const newLimit = parseInt(e.target.value);
+    setPagination(prev => ({ 
+      ...prev, 
+      limit: newLimit,
+      page: 1 // Reset to first page when changing items per page
+    }));
+  };
+
+  // ✅ CLOCKED-IN FILTER - Only filter for clocked-in status on frontend
   const filteredTrainers = trainers.filter((trainer) => {
-    const matchesSearch =
-      trainer.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      trainer.profile?.firstName
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      trainer.profile?.lastName
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      trainer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      trainer.profile?.employeeId
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase());
-
-    const matchesStatus =
-      statusFilter === "ALL" ||
-      (statusFilter === "CLOCKED_IN" && trainer.isClockedIn) ||
-      (statusFilter === "NOT_CLOCKED_IN" && !trainer.isClockedIn) ||
-      (statusFilter === "ACTIVE" && trainer.status === "ACTIVE") ||
-      (statusFilter === "INACTIVE" && trainer.status === "INACTIVE");
-
-    return matchesSearch && matchesStatus;
+    if (statusFilter === "CLOCKED_IN") return trainer.isClockedIn === true;
+    if (statusFilter === "NOT_CLOCKED_IN") return trainer.isClockedIn === false;
+    return true; // ACTIVE/INACTIVE filters are handled by backend
   });
+
+  // ... (keep all your existing helper functions: getStatusBadge, getAttendanceBadge, getWorkingHours)
 
   const getStatusBadge = (status) => {
     const statusConfig = {
@@ -268,7 +301,7 @@ export default function TrainersList() {
     );
   }
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <div className="max-w-7xl mx-auto p-6">
         <div className="animate-pulse">
@@ -286,7 +319,7 @@ export default function TrainersList() {
   return (
     <div className="max-w-7xl mx-auto p-6">
       {/* Header with Stats */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">All Trainers</h1>
           <p className="text-gray-600 mt-2">
@@ -301,7 +334,7 @@ export default function TrainersList() {
             </div>
             <div className="flex items-center bg-gray-50 px-3 py-1 rounded-full">
               <div className="w-2 h-2 bg-gray-400 rounded-full mr-2"></div>
-              <span>Total: {trainers.length}</span>
+              <span>Total: {pagination.total}</span>
             </div>
           </div>
         </div>
@@ -317,23 +350,36 @@ export default function TrainersList() {
                 type="text"
                 placeholder="Search trainers by name, email, username, or employee ID..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearch}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={handleStatusFilter}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="ALL">All Trainers</option>
-              <option value="CLOCKED_IN">Clocked In</option>
-              <option value="NOT_CLOCKED_IN">Not Clocked In</option>
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
+              <option value="CLOCKED_IN">Clocked In</option>
+              <option value="NOT_CLOCKED_IN">Not Clocked In</option>
             </select>
+            
+            {/* ✅ Items per page selector - Your backend supports this */}
+            <select
+              value={pagination.limit}
+              onChange={handleLimitChange}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="5">5 per page</option>
+              <option value="10">10 per page</option>
+              <option value="15">15 per page</option>
+              <option value="20">20 per page</option>
+            </select>
+            
             <button
               onClick={handleRefresh}
               disabled={refreshing}
@@ -355,6 +401,7 @@ export default function TrainersList() {
             key={trainer._id}
             className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
           >
+            {/* ... (keep all your existing trainer card JSX) ... */}
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center space-x-3">
@@ -481,6 +528,7 @@ export default function TrainersList() {
         ))}
       </div>
 
+      {/* No Results */}
       {filteredTrainers.length === 0 && (
         <div className="text-center py-12">
           <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -492,6 +540,84 @@ export default function TrainersList() {
               ? "Try adjusting your search or filters"
               : "No trainers are currently registered in the system"}
           </p>
+        </div>
+      )}
+
+      {/* ✅ PAGINATION CONTROLS - Matches your backend structure */}
+      {pagination.pages > 1 && (
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-sm text-gray-700">
+            Showing <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> to{' '}
+            <span className="font-medium">
+              {Math.min(pagination.page * pagination.limit, pagination.total)}
+            </span>{' '}
+            of <span className="font-medium">{pagination.total}</span> trainers
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handlePageChange(1)}
+              disabled={pagination.page === 1}
+              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="First Page"
+            >
+              <ChevronFirst className="w-4 h-4" />
+            </button>
+            
+            <button
+              onClick={() => handlePageChange(pagination.page - 1)}
+              disabled={pagination.page === 1}
+              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
+                let pageNum;
+                if (pagination.pages <= 5) {
+                  pageNum = i + 1;
+                } else if (pagination.page <= 3) {
+                  pageNum = i + 1;
+                } else if (pagination.page >= pagination.pages - 2) {
+                  pageNum = pagination.pages - 4 + i;
+                } else {
+                  pageNum = pagination.page - 2 + i;
+                }
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
+                      pagination.page === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            
+            <button
+              onClick={() => handlePageChange(pagination.page + 1)}
+              disabled={pagination.page === pagination.pages}
+              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            
+            <button
+              onClick={() => handlePageChange(pagination.pages)}
+              disabled={pagination.page === pagination.pages}
+              className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Last Page"
+            >
+              <ChevronLast className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 

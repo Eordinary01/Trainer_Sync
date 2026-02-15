@@ -239,8 +239,8 @@ export default function Dashboard() {
   };
 
   const handleApplyLeave = () => navigate("/trainer/apply-leave");
-  const handleViewHistory = () => navigate("/trainer/attendance-history");
-  const handleViewLeaveHistory = () => navigate("/trainer/leaves/history");
+  const handleViewHistory = () => navigate("/trainer/attendance/history");
+  const handleViewLeaveHistory = () => navigate("/trainer/leaves/reports");
   const handleViewLeaveBalance = () => navigate("/trainer/leaves/balance");
 
   const trainerName = user?.profile?.firstName
@@ -363,7 +363,34 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
-      {/* Header */}
+      {/* Header - Trainer Dashboard */}
+      <header className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg">
+                  <User className="text-white" size={24} />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-800">
+                    Trainer Dashboard
+                  </h1>
+                  <p className="text-sm text-gray-500">
+                    Welcome back, <span className="font-semibold text-blue-600">{trainerName}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                {user?.profile?.employeeId || "No ID"}
+              </span>
+              {getTrainerCategoryBadge()}
+            </div>
+          </div>
+        </div>
+      </header>
 
       <main className="p-4 md:p-8">
         {/* Error Display */}
@@ -857,28 +884,28 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="text-center">
                     <div className="text-lg font-bold text-green-600">
-                      {trainerStats.approvedLeaves || 0}
+                      {trainerStats.approvedThisYear || 0}
                     </div>
                     <div className="text-xs text-gray-500">Approved</div>
                   </div>
                   <div className="text-center">
                     <div className="text-lg font-bold text-yellow-600">
-                      {trainerStats.pendingLeaves || 0}
+                      {trainerStats.pendingRequests || 0}
                     </div>
                     <div className="text-xs text-gray-500">Pending</div>
                   </div>
                   <div className="text-center">
                     <div className="text-lg font-bold text-red-600">
-                      {trainerStats.rejectedLeaves || 0}
+                      {trainerStats.rejectedRequests || 0}
                     </div>
                     <div className="text-xs text-gray-500">Rejected</div>
                   </div>
-                  <div className="text-center">
+                  {/* <div className="text-center">
                     <div className="text-lg font-bold text-blue-600">
                       {trainerStats.totalLeaves || 0}
                     </div>
                     <div className="text-xs text-gray-500">Total</div>
-                  </div>
+                  </div> */}
                 </div>
               </div>
 

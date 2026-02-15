@@ -11,7 +11,7 @@ const leaveController = new LeaveController();
 // ✅ PUBLIC ENDPOINTS (Authentication required)
 // ============================================
 
-// Apply for leave (Trainer requests)
+// Apply for leave (Trainer & HR requests - ADMIN cannot apply)
 leavesRouter.post(
   '/',
   authenticate,
@@ -20,10 +20,18 @@ leavesRouter.post(
   (req, res, next) => leaveController.applyLeave(req, res, next)
 );
 
-// Get own leave balance
+// Get own leave balance (HR gets unlimited, Trainers get actual)
 leavesRouter.get(
   '/balance',
   authenticate,
+  (req, res, next) => leaveController.getLeaveBalance(req, res, next)
+);
+
+// ✅ ADDED: HR specific leave balance (Unlimited)
+leavesRouter.get(
+  '/hr/balance',
+  authenticate,
+  authorize('HR'),
   (req, res, next) => leaveController.getLeaveBalance(req, res, next)
 );
 
@@ -32,6 +40,14 @@ leavesRouter.get(
   '/history',
   authenticate,
   (req, res, next) => leaveController.getLeaveHistory(req, res, next)
+);
+
+// ✅ ADDED: HR specific leave history
+leavesRouter.get(
+  '/hr/history',
+  authenticate,
+  authorize('HR'),
+  (req, res, next) => leaveController.getHRLeaveHistory(req, res, next)
 );
 
 // Get own leave statistics
@@ -66,7 +82,7 @@ leavesRouter.put(
 // ✅ ADMIN/HR ENDPOINTS (Admin/HR only)
 // ============================================
 
-// Get all pending leaves
+// Get all pending leaves (Role-based filtering inside controller)
 leavesRouter.get(
   '/pending',
   authenticate,
@@ -74,19 +90,27 @@ leavesRouter.get(
   (req, res, next) => leaveController.getPendingLeaves(req, res, next)
 );
 
-// Approve leave request
+// ✅ ADDED: Get all pending HR leaves (Admin only)
+leavesRouter.get(
+  '/admin/pending-hr',
+  authenticate,
+  authorize('ADMIN'),
+  (req, res, next) => leaveController.getPendingHRLeaves(req, res, next)
+);
+
+// Approve leave request (Role-based approval logic inside controller)
 leavesRouter.post(
   '/:id/approve',
   authenticate,
-  authorize('ADMIN', 'HR'),
+  authorize('ADMIN', 'HR'), // HR can approve, but controller restricts to TRAINER leaves only
   (req, res, next) => leaveController.approveLeave(req, res, next)
 );
 
-// Reject leave request
+// Reject leave request (Role-based rejection logic inside controller)
 leavesRouter.post(
   '/:id/reject',
   authenticate,
-  authorize('ADMIN', 'HR'),
+  authorize('ADMIN', 'HR'), // HR can reject, but controller restricts to TRAINER leaves only
   (req, res, next) => leaveController.rejectLeave(req, res, next)
 );
 
@@ -121,7 +145,6 @@ leavesRouter.get(
   authorize('ADMIN', 'HR'),
   (req, res, next) => leaveController.getLeaveAuditHistory(req, res, next)
 );
-
 
 // ============================================
 // ✅ LEAVE BALANCE MANAGEMENT (Admin/HR only)
@@ -199,20 +222,19 @@ leavesRouter.get(
 // ✅ BULK OPERATIONS (Admin/HR only)
 // ============================================
 
-// Bulk edit leave balances (CSV/Excel upload)
-// leavesRouter.post(
-//   '/bulk/update-balances',
-//   authenticate,
-//   authorize('ADMIN', 'HR'),
-//   (req, res, next) => leaveController.bulkUpdateLeaveBalances(req, res, next)
-// );
-
 // Generate leave balance report
 leavesRouter.get(
   '/reports/balance',
   authenticate,
   authorize('ADMIN', 'HR'),
   (req, res, next) => leaveController.generateBalanceReport(req, res, next)
+);
+
+leavesRouter.get(
+  '/reports/balance/download',
+  authenticate,
+  authorize('ADMIN', 'HR'),
+  (req, res, next) => leaveController.downloadBalanceReport(req, res, next)
 );
 
 export default leavesRouter;

@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import LoginForm from "./components/auth/LoginForm.jsx";
 import ChangePassword from "./components/auth/ChangePassword.jsx";
+import ForgotPassword from "./components/auth/ForgetPassword.jsx"; // ✅ ADDED
 import AdminDashboard from "./components/Admin/AdminDashboard.jsx";
 import TrainerDashboard from "./components/Dashboard/TrainerDashboard.jsx";
 import CreateTrainerForm from "./components/Admin/CreateTrainerForm.jsx";
@@ -12,7 +13,7 @@ import {
   ApprovedLeaves,
   LeaveReports,
 } from "./components/Admin/LeavePage.jsx";
-import AdminLeaveManagement from "./components/Admin/AdminLeaveManagement.jsx"; 
+import AdminLeaveManagement from "./components/Admin/AdminLeaveManagement.jsx";
 import LeaveApplicationForm from "./components/Leave/LeaveApplicationForm.jsx";
 import { CreateAdminForm } from "./components/Admin/CreateAdminForm.jsx";
 import TrainerDetailedView from "./components/Admin/TrainerDetails.jsx";
@@ -21,6 +22,10 @@ import Navbar from "./components/Common/Navbar.jsx";
 import { useAuth } from "./hooks/useAuth.js";
 import ProfilePage from "./components/Profile/ProfileView.jsx";
 import ClockedInNow from "./components/Admin/ClockedIn.jsx";
+// HR Leave Components
+import HRLeaveSection from "./components/HR/HRLeaveSection.jsx";
+import HRLeaveApproval from "./components/Admin/HRLeaveApproval.jsx";
+import TrainerAttendanceHistory from "./components/Dashboard/TrainerAttendanceHistory.jsx";
 
 export default function App() {
   const { isAuthenticated, loading, user } = useAuth();
@@ -43,7 +48,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes */}
+        {/* ============ PUBLIC ROUTES ============ */}
         <Route
           path="/login"
           element={
@@ -55,6 +60,12 @@ export default function App() {
           }
         />
 
+        {/* ✅ ADDED: Forgot Password Routes */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ForgotPassword />} />
+
+        {/* ============ PROTECTED ROUTES ============ */}
+        
         {/* Change Password Route */}
         <Route
           path="/change-password"
@@ -81,6 +92,40 @@ export default function App() {
                     />
                     <Route path="leaves/reports" element={<LeaveReports />} />
                     <Route path="profile" element={<ProfilePage />} />
+                    <Route
+                      path="attendance/history"
+                      element={<TrainerAttendanceHistory />}
+                    />
+                    {/* Default redirect */}
+                    <Route path="" element={<Navigate to="dashboard" replace />} />
+                  </Routes>
+                </div>
+              </div>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* HR Routes */}
+        <Route
+          path="/hr/*"
+          element={
+            <ProtectedRoute requiredRole="HR">
+              <div className="min-h-screen bg-gray-50">
+                <Navbar />
+                <div className="container mx-auto px-4 py-6">
+                  <Routes>
+                    <Route path="dashboard" element={<AdminDashboard />} />
+                    <Route
+                      path="leaves/my-leaves"
+                      element={<HRLeaveSection />}
+                    />
+                    <Route path="profile" element={<ProfilePage />} />
+                    <Route
+                      path="apply-leave"
+                      element={<LeaveApplicationForm />}
+                    />
+                    {/* Default redirect */}
+                    <Route path="" element={<Navigate to="dashboard" replace />} />
                   </Routes>
                 </div>
               </div>
@@ -103,12 +148,18 @@ export default function App() {
                       element={<CreateTrainerForm />}
                     />
                     <Route path="trainers" element={<TrainersList />} />
-                    
-                    {/* Use only one leave management route */}
                     <Route path="leaves" element={<AdminLeaveManagement />} />
                     
-                    {/* Remove these separate routes since they're now tabs in AdminLeaveManagement */}
-                    {/* <Route path="attendance" element={<AttendanceReport />} /> */}
+                    {/* HR Leave Approval - Admin only */}
+                    <Route
+                      path="leaves/hr-approvals"
+                      element={
+                        <ProtectedRoute requiredRole="ADMIN">
+                          <HRLeaveApproval />
+                        </ProtectedRoute>
+                      }
+                    />
+
                     <Route path="clocked-in" element={<ClockedInNow />} />
                     <Route path="attendance" element={<AttendanceReport />} />
                     <Route path="leaves/pending" element={<PendingLeaves />} />
@@ -127,6 +178,8 @@ export default function App() {
                       path="trainers/:id/profile"
                       element={<ProfilePage />}
                     />
+                    {/* Default redirect */}
+                    <Route path="" element={<Navigate to="dashboard" replace />} />
                   </Routes>
                 </div>
               </div>
@@ -149,7 +202,7 @@ export default function App() {
           }
         />
 
-        {/* Redirects */}
+        {/* ============ REDIRECTS ============ */}
         <Route
           path="/"
           element={
@@ -160,7 +213,7 @@ export default function App() {
           }
         />
 
-        {/* Unauthorized */}
+        {/* Unauthorized Page */}
         <Route
           path="/unauthorized"
           element={
@@ -183,6 +236,7 @@ export default function App() {
           }
         />
 
+        {/* Catch all - redirect to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

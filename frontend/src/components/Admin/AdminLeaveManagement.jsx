@@ -57,7 +57,7 @@ export default function AdminLeaveManagement() {
   const [filters, setFilters] = useState({
     status: "",
     leaveType: "",
-    trainerId: "",
+    applicantId: "",
     fromDate: "",
     toDate: "",
     page: 1,
@@ -98,7 +98,8 @@ export default function AdminLeaveManagement() {
 
       if (filters.status) queryParams.append("status", filters.status);
       if (filters.leaveType) queryParams.append("leaveType", filters.leaveType);
-      if (filters.trainerId) queryParams.append("trainerId", filters.trainerId);
+      if (filters.applicantId)
+        queryParams.append("applicantId", filters.applicantId);
       if (filters.fromDate) queryParams.append("fromDate", filters.fromDate);
       if (filters.toDate) queryParams.append("toDate", filters.toDate);
       queryParams.append("page", filters.page);
@@ -206,7 +207,7 @@ export default function AdminLeaveManagement() {
   const handleApprove = async (leaveId, comments = "") => {
     try {
       setError(null);
-      const response = await api.put(`/leaves/${leaveId}/approve`, {
+      const response = await api.post(`/leaves/${leaveId}/approve`, {
         comments,
       });
       if (response.data.success) {
@@ -223,7 +224,9 @@ export default function AdminLeaveManagement() {
   const handleReject = async (leaveId, comments = "") => {
     try {
       setError(null);
-      const response = await api.put(`/leaves/${leaveId}/reject`, { comments });
+      const response = await api.post(`/leaves/${leaveId}/reject`, {
+        comments,
+      });
       if (response.data.success) {
         setSuccess(`Leave rejected successfully`);
         fetchPendingLeaves();
@@ -236,14 +239,14 @@ export default function AdminLeaveManagement() {
 
   // Handle update leave balance
   const handleUpdateBalance = async (
-    trainerId,
+    applicantId,
     leaveType,
     newBalance,
     reason,
   ) => {
     try {
       setError(null);
-      const response = await api.put(`/leaves/balance/${trainerId}/edit`, {
+      const response = await api.put(`/leaves/balance/${applicantId}/edit`, {
         leaveType,
         newBalance,
         reason,
@@ -356,7 +359,7 @@ export default function AdminLeaveManagement() {
     filters.page,
     filters.status,
     filters.leaveType,
-    filters.trainerId,
+    filters.applicantId,
   ]);
 
   // Clear messages after 5 seconds
@@ -538,6 +541,13 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [comments, setComments] = useState("");
 
+  // ✅ FILTER: Only show pending leaves from TRAINER role, exclude HR
+  const trainerPendingLeaves = pendingLeaves.filter(
+    (leave) => 
+      leave.applicantRole === "TRAINER" || 
+      leave.applicantId?.role === "TRAINER"
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -547,16 +557,21 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
     );
   }
 
-  if (pendingLeaves.length === 0) {
+  if (trainerPendingLeaves.length === 0) {
     return (
       <div className="text-center py-12">
         <CheckCircle className="w-16 h-16 mx-auto text-green-400 mb-4" />
         <h3 className="text-xl font-semibold text-gray-700 mb-2">
-          No Pending Requests
+          No Pending Trainer Requests
         </h3>
         <p className="text-gray-500">
-          There are no pending leave requests at the moment.
+          There are no pending leave requests from trainers at the moment.
         </p>
+        {pendingLeaves.length > 0 && (
+          <p className="text-sm text-gray-400 mt-2">
+            Note: {pendingLeaves.length} HR leave request(s) are filtered out and managed separately.
+          </p>
+        )}
       </div>
     );
   }
@@ -564,13 +579,26 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-gray-800">
-          Pending Leave Requests
-        </h2>
-        <span className="text-sm text-gray-500">
-          {pendingLeaves.length} request{pendingLeaves.length !== 1 ? "s" : ""}{" "}
-          pending
-        </span>
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">
+            Pending Leave Requests
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Showing only trainer requests • HR leaves are managed separately
+          </p>
+        </div>
+        <div className="text-right">
+          <span className="text-sm text-gray-500 block">
+            {trainerPendingLeaves.length} trainer request
+            {trainerPendingLeaves.length !== 1 ? "s" : ""} pending
+          </span>
+          {pendingLeaves.length > trainerPendingLeaves.length && (
+            <span className="text-xs text-gray-400">
+              ({pendingLeaves.length - trainerPendingLeaves.length} HR request
+              {pendingLeaves.length - trainerPendingLeaves.length !== 1 ? "s" : ""} filtered)
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -586,7 +614,7 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Dates
               </th>
-              <th className="px4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Days
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -598,20 +626,25 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {pendingLeaves.map((leave) => (
+            {trainerPendingLeaves.map((leave) => (
               <tr key={leave._id} className="hover:bg-gray-50">
                 <td className="px-4 py-4">
                   <div>
                     <p className="font-medium text-gray-900">
-                      {leave.trainerId?.profile?.firstName}{" "}
-                      {leave.trainerId?.profile?.lastName}
+                      {leave.applicantId?.profile?.firstName}{" "}
+                      {leave.applicantId?.profile?.lastName || leave.applicantName}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {leave.trainerId?.username}
+                      {leave.applicantId?.username || leave.applicantId?.email}
                     </p>
-                    <p className="text-xs text-gray-400">
-                      {leave.trainerId?.trainerCategory}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
+                        Trainer
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {leave.applicantId?.trainerCategory || 'N/A'}
+                      </span>
+                    </div>
                   </div>
                 </td>
                 <td className="px-4 py-4">
@@ -629,17 +662,26 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
                 </td>
                 <td className="px-4 py-4">
                   <div className="text-sm text-gray-900">
-                    {formatDate(leave.fromDate)} to {formatDate(leave.toDate)}
+                    {formatDate(leave.fromDate)} <span className="text-gray-400">to</span>{" "}
+                    {formatDate(leave.toDate)}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {getDayCount(leave.fromDate, leave.toDate)} calendar days
                   </div>
                 </td>
                 <td className="px-4 py-4">
-                  <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-sm">
-                    {leave.numberOfDays} day
-                    {leave.numberOfDays !== 1 ? "s" : ""}
+                  <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-sm font-medium">
+                    {leave.numberOfDays || leave.totalDays} day
+                    {(leave.numberOfDays || leave.totalDays) !== 1 ? "s" : ""}
                   </span>
                 </td>
-                <td className="px-4 py-4 text-sm text-gray-500">
-                  {formatDate(leave.createdAt)}
+                <td className="px-4 py-4">
+                  <div className="text-sm text-gray-500">
+                    {formatDate(leave.appliedOn || leave.createdAt)}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {getTimeAgo(leave.appliedOn || leave.createdAt)}
+                  </div>
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex gap-2">
@@ -648,20 +690,20 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
                         setSelectedLeave(leave);
                         setComments("");
                       }}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                       title="View Details"
                     >
                       <Eye size={16} />
                     </button>
                     <button
                       onClick={() => onApprove(leave._id, "")}
-                      className="px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded text-sm font-medium"
+                      className="px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg text-sm font-medium transition-colors"
                     >
                       Approve
                     </button>
                     <button
                       onClick={() => onReject(leave._id, "")}
-                      className="px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-sm font-medium"
+                      className="px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm font-medium transition-colors"
                     >
                       Reject
                     </button>
@@ -680,14 +722,21 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
             <div className="p-6">
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-800">
-                    Leave Request Details
-                  </h3>
-                  <p className="text-gray-600">Review before taking action</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-xl font-bold text-gray-800">
+                      Trainer Leave Request
+                    </h3>
+                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                      Trainer
+                    </span>
+                  </div>
+                  <p className="text-gray-600">
+                    Review before taking action
+                  </p>
                 </div>
                 <button
                   onClick={() => setSelectedLeave(null)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <XCircle size={24} />
                 </button>
@@ -697,20 +746,24 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Trainer
+                      Trainer Information
                     </label>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="font-medium">
-                        {selectedLeave.trainerId?.profile?.firstName}{" "}
-                        {selectedLeave.trainerId?.profile?.lastName}
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="font-medium text-gray-900">
+                        {selectedLeave.applicantId?.profile?.firstName}{" "}
+                        {selectedLeave.applicantId?.profile?.lastName}
                       </p>
-                      <p className="text-sm text-gray-500">
-                        {selectedLeave.trainerId?.username}
+                      <p className="text-sm text-gray-600">
+                        {selectedLeave.applicantId?.username || selectedLeave.applicantId?.email}
                       </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {selectedLeave.trainerId?.trainerCategory} • Employee
-                        ID: {selectedLeave.trainerId?.profile?.employeeId}
-                      </p>
+                      <div className="flex items-center gap-2 mt-2 text-xs">
+                        <span className="px-2 py-1 bg-gray-200 text-gray-700 rounded">
+                          ID: {selectedLeave.applicantId?.profile?.employeeId || 'N/A'}
+                        </span>
+                        <span className="px-2 py-1 bg-gray-200 text-gray-700 rounded">
+                          {selectedLeave.applicantId?.trainerCategory || 'Trainer'}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -718,8 +771,8 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Leave Details
                     </label>
-                    <div className="p-3 bg-gray-50 rounded-lg space-y-2">
-                      <div className="flex justify-between">
+                    <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+                      <div className="flex justify-between items-center">
                         <span className="text-gray-600">Type:</span>
                         <span
                           className={`px-2 py-1 text-xs rounded-full ${
@@ -734,14 +787,18 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Duration:</span>
+                        <span className="text-gray-600">Working Days:</span>
                         <span className="font-medium">
-                          {selectedLeave.numberOfDays} days
+                          {selectedLeave.numberOfDays || selectedLeave.totalDays} days
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Applied On:</span>
-                        <span>{formatDate(selectedLeave.createdAt)}</span>
+                        <span>{formatDate(selectedLeave.appliedOn || selectedLeave.createdAt)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Last Updated:</span>
+                        <span>{formatDate(selectedLeave.updatedAt)}</span>
                       </div>
                     </div>
                   </div>
@@ -750,29 +807,35 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Date Range
+                      Leave Period
                     </label>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <div className="text-center mb-2">
-                        <span className="text-2xl font-bold text-blue-600">
-                          {selectedLeave.numberOfDays}
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <div className="text-center mb-3">
+                        <span className="text-3xl font-bold text-blue-600">
+                          {selectedLeave.numberOfDays || selectedLeave.totalDays}
                         </span>
                         <span className="text-gray-600 ml-1">
-                          day{selectedLeave.numberOfDays !== 1 ? "s" : ""}
+                          day{(selectedLeave.numberOfDays || selectedLeave.totalDays) !== 1 ? "s" : ""}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-center">
-                          <div className="text-sm text-gray-500">From</div>
-                          <div className="font-medium">
+                        <div className="text-center flex-1">
+                          <div className="text-xs text-gray-500 mb-1">From</div>
+                          <div className="font-medium text-sm">
                             {formatDate(selectedLeave.fromDate)}
                           </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            {formatDay(selectedLeave.fromDate)}
+                          </div>
                         </div>
-                        <div className="text-gray-400">→</div>
-                        <div className="text-center">
-                          <div className="text-sm text-gray-500">To</div>
-                          <div className="font-medium">
+                        <div className="text-gray-400 px-3">→</div>
+                        <div className="text-center flex-1">
+                          <div className="text-xs text-gray-500 mb-1">To</div>
+                          <div className="font-medium text-sm">
                             {formatDate(selectedLeave.toDate)}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            {formatDay(selectedLeave.toDate)}
                           </div>
                         </div>
                       </div>
@@ -781,11 +844,11 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Reason
+                      Reason for Leave
                     </label>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-gray-700 whitespace-pre-wrap">
-                        {selectedLeave.reason}
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-gray-700 whitespace-pre-wrap text-sm">
+                        {selectedLeave.reason || "No reason provided"}
                       </p>
                     </div>
                   </div>
@@ -794,21 +857,24 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Comments (Optional)
+                  Comments / Remarks
                 </label>
                 <textarea
                   value={comments}
                   onChange={(e) => setComments(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   rows="3"
-                  placeholder="Add comments for the trainer..."
+                  placeholder="Add comments for the trainer (optional)..."
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  These comments will be visible to the trainer
+                </p>
               </div>
 
-              <div className="flex justify-end gap-3 mt-6">
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
                 <button
                   onClick={() => setSelectedLeave(null)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
@@ -817,7 +883,7 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
                     onReject(selectedLeave._id, comments);
                     setSelectedLeave(null);
                   }}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
                 >
                   <XSquare size={16} />
                   Reject Leave
@@ -827,7 +893,7 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
                     onApprove(selectedLeave._id, comments);
                     setSelectedLeave(null);
                   }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
                 >
                   <CheckSquare size={16} />
                   Approve Leave
@@ -840,6 +906,41 @@ function PendingRequestsTab({ pendingLeaves, loading, onApprove, onReject }) {
     </div>
   );
 }
+
+// ✅ Helper functions for better UX
+const getDayCount = (fromDate, toDate) => {
+  const from = new Date(fromDate);
+  const to = new Date(toDate);
+  const diffTime = Math.abs(to - from);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  return diffDays;
+};
+
+const getTimeAgo = (date) => {
+  const now = new Date();
+  const past = new Date(date);
+  const diffMs = now - past;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
+  
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+  
+  return formatDate(date);
+};
+
+const formatDay = (date) => {
+  return new Date(date).toLocaleDateString('en-US', { 
+    weekday: 'short',
+    month: 'short', 
+    day: 'numeric' 
+  });
+};
 
 function AllLeavesTab({
   leaves,
@@ -866,12 +967,19 @@ function AllLeavesTab({
     );
   }
 
+  // ✅ FILTER: Only show leaves from TRAINER role, exclude HR
+  const trainerLeaves = leaves.filter(
+    (leave) => 
+      leave.applicantRole === "TRAINER" || 
+      leave.applicantId?.role === "TRAINER"
+  );
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-gray-800">All Leave Requests</h2>
         <span className="text-sm text-gray-500">
-          Total: {pagination.total} leaves
+          Total: {pagination.total} leaves • Showing: {trainerLeaves.length} trainer leaves
         </span>
       </div>
 
@@ -915,16 +1023,18 @@ function AllLeavesTab({
             Trainer
           </label>
           <select
-            value={filters.trainerId}
-            onChange={(e) => handleFilterChange("trainerId", e.target.value)}
+            value={filters.applicantId}
+            onChange={(e) => handleFilterChange("applicantId", e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="">All Trainers</option>
-            {trainers.map((trainer) => (
-              <option key={trainer._id} value={trainer._id}>
-                {trainer.profile?.firstName} {trainer.profile?.lastName}
-              </option>
-            ))}
+            {trainers
+              .filter(trainer => trainer.role === "TRAINER") // ✅ Only show trainers in dropdown
+              .map((trainer) => (
+                <option key={trainer._id} value={trainer._id}>
+                  {trainer.profile?.firstName} {trainer.profile?.lastName}
+                </option>
+              ))}
           </select>
         </div>
 
@@ -953,178 +1063,211 @@ function AllLeavesTab({
         </div>
       </div>
 
-      {/* Leaves Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Trainer
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Leave Details
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Dates
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {leaves.map((leave) => (
-              <React.Fragment key={leave._id}>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-4 py-4">
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {leave.trainerId?.profile?.firstName}{" "}
-                        {leave.trainerId?.profile?.lastName}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {leave.trainerId?.username}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div>
+      {/* No Trainer Leaves Message */}
+      {trainerLeaves.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-lg">
+          <Calendar className="mx-auto text-gray-400 mb-3" size={48} />
+          <p className="text-gray-500 font-medium">No trainer leave requests found</p>
+          <p className="text-sm text-gray-400 mt-1">
+            All displayed leaves are from trainers only. HR leaves are managed separately.
+          </p>
+        </div>
+      ) : (
+        /* Leaves Table */
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Trainer
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Leave Details
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Dates
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {trainerLeaves.map((leave) => (
+                <React.Fragment key={leave._id}>
+                  <tr className="hover:bg-gray-50">
+                    <td className="px-4 py-4">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {leave.applicantId?.profile?.firstName}{" "}
+                          {leave.applicantId?.profile?.lastName || leave.applicantName}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {leave.applicantId?.profile?.employeeId || "Trainer"}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div>
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full mb-1 inline-block ${
+                            leave.leaveType === "SICK"
+                              ? "bg-blue-100 text-blue-800"
+                              : leave.leaveType === "CASUAL"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-purple-100 text-purple-800"
+                          }`}
+                        >
+                          {leave.leaveType}
+                        </span>
+                        <p className="text-sm text-gray-600">
+                          {leave.numberOfDays || leave.totalDays} days
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="text-sm">
+                        <p className="text-gray-900">
+                          {formatDate(leave.fromDate)}
+                        </p>
+                        <p className="text-gray-500">
+                          to {formatDate(leave.toDate)}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Applied: {formatDate(leave.appliedOn || leave.createdAt)}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
                       <span
-                        className={`px-2 py-1 text-xs rounded-full mb-1 inline-block ${
-                          leave.leaveType === "SICK"
-                            ? "bg-blue-100 text-blue-800"
-                            : leave.leaveType === "CASUAL"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-purple-100 text-purple-800"
+                        className={`px-2 py-1 text-xs rounded-full ${
+                          leave.status === "APPROVED"
+                            ? "bg-green-100 text-green-800"
+                            : leave.status === "PENDING"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : leave.status === "REJECTED"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-gray-100 text-gray-800"
                         }`}
                       >
-                        {leave.leaveType}
+                        {leave.status}
                       </span>
-                      <p className="text-sm text-gray-600">
-                        {leave.numberOfDays} days
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="text-sm">
-                      <p className="text-gray-900">
-                        {formatDate(leave.fromDate)}
-                      </p>
-                      <p className="text-gray-500">
-                        to {formatDate(leave.toDate)}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span
-                      className={`px-2 py-1 text-xs rounded-full ${
-                        leave.status === "APPROVED"
-                          ? "bg-green-100 text-green-800"
-                          : leave.status === "PENDING"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : leave.status === "REJECTED"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {leave.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() =>
-                          setExpandedRow(
-                            expandedRow === leave._id ? null : leave._id,
-                          )
-                        }
-                        className="p-1 text-gray-600 hover:text-gray-900"
-                      >
-                        {expandedRow === leave._id ? (
-                          <ChevronUp size={16} />
-                        ) : (
-                          <ChevronDown size={16} />
-                        )}
-                      </button>
-                      {leave.status === "APPROVED" && (
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex gap-2">
                         <button
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                "Are you sure you want to cancel this approved leave?",
-                              )
-                            ) {
-                              onCancel(leave._id, "Admin cancelled");
-                            }
-                          }}
-                          className="px-2 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-xs font-medium"
+                          onClick={() =>
+                            setExpandedRow(
+                              expandedRow === leave._id ? null : leave._id,
+                            )
+                          }
+                          className="p-1 text-gray-600 hover:text-gray-900"
+                          title="View details"
                         >
-                          Cancel
+                          {expandedRow === leave._id ? (
+                            <ChevronUp size={16} />
+                          ) : (
+                            <ChevronDown size={16} />
+                          )}
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-
-                {expandedRow === leave._id && (
-                  <tr>
-                    <td colSpan="5" className="px-4 py-4 bg-blue-50">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <h4 className="font-medium text-gray-700 mb-2">
-                            Reason
-                          </h4>
-                          <p className="text-sm text-gray-600 bg-white p-3 rounded">
-                            {leave.reason}
-                          </p>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-gray-700 mb-2">
-                            Details
-                          </h4>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Applied On:</span>
-                              <span>{formatDate(leave.createdAt)}</span>
-                            </div>
-                            {leave.approvedBy && (
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">
-                                  Approved By:
-                                </span>
-                                <span>{leave?.approvedBy}</span>
-                              </div>
-                            )}
-                            {leave.rejectedBy && (
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">
-                                  Rejected By:
-                                </span>
-                                <span>{leave?.rejectedBy}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        {leave.status === "APPROVED" && (
+                          <button
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  "Are you sure you want to cancel this approved leave?",
+                                )
+                              ) {
+                                onCancel(leave._id, "Admin cancelled");
+                              }
+                            }}
+                            className="px-2 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-xs font-medium"
+                          >
+                            Cancel
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
 
-      {/* Pagination */}
-      {pagination.pages > 1 && (
+                  {expandedRow === leave._id && (
+                    <tr>
+                      <td colSpan="5" className="px-4 py-4 bg-blue-50">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <h4 className="font-medium text-gray-700 mb-2">
+                              Reason
+                            </h4>
+                            <p className="text-sm text-gray-600 bg-white p-3 rounded">
+                              {leave.reason || "No reason provided"}
+                            </p>
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-700 mb-2">
+                              Details
+                            </h4>
+                            <div className="space-y-2 text-sm bg-white p-3 rounded">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Applied On:</span>
+                                <span className="font-medium">
+                                  {formatDate(leave.appliedOn || leave.createdAt)}
+                                </span>
+                              </div>
+                              {leave.approvedBy && (
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">
+                                    Approved By:
+                                  </span>
+                                  <span className="font-medium text-green-600">
+                                    {typeof leave.approvedBy === 'object' 
+                                      ? `${leave.approvedBy?.profile?.firstName || ''} ${leave.approvedBy?.profile?.lastName || ''}`.trim() 
+                                      : leave.approvedBy}
+                                  </span>
+                                </div>
+                              )}
+                              {leave.rejectedBy && (
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">
+                                    Rejected By:
+                                  </span>
+                                  <span className="font-medium text-red-600">
+                                    {typeof leave.rejectedBy === 'object'
+                                      ? `${leave.rejectedBy?.profile?.firstName || ''} ${leave.rejectedBy?.profile?.lastName || ''}`.trim()
+                                      : leave.rejectedBy}
+                                  </span>
+                                </div>
+                              )}
+                              {leave.adminRemarks && (
+                                <div className="mt-2 pt-2 border-t">
+                                  <span className="text-gray-600">Admin Remarks:</span>
+                                  <p className="text-gray-800 mt-1 italic">
+                                    "{leave.adminRemarks}"
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination - Only show if there are trainer leaves and more than 1 page */}
+      {pagination.pages > 1 && trainerLeaves.length > 0 && (
         <div className="flex justify-center items-center gap-4 mt-6">
           <button
             onClick={() => onPageChange(Math.max(1, filters.page - 1))}
             disabled={filters.page === 1}
-            className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
           >
             Previous
           </button>
@@ -1136,7 +1279,7 @@ function AllLeavesTab({
               onPageChange(Math.min(pagination.pages, filters.page + 1))
             }
             disabled={filters.page === pagination.pages}
-            className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
           >
             Next
           </button>
@@ -1159,8 +1302,8 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleTrainerSelect = async (trainerId) => {
-    setSelectedTrainer(trainerId);
+  const handleTrainerSelect = async (applicantId) => {
+    setSelectedTrainer(applicantId);
     setIsContractedTrainer(false);
     setTrainerBalance(null);
     // Reset form when changing trainer
@@ -1171,15 +1314,15 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
       reason: "",
     });
 
-    if (trainerId) {
+    if (applicantId) {
       setIsLoadingBalance(true);
       try {
-        const response = await api.get(`/leaves/balance/${trainerId}`);
+        const response = await api.get(`/leaves/balance/${applicantId}`);
         if (response.data.success) {
           setTrainerBalance(response.data.data);
 
           // Check if trainer is CONTRACTED
-          const trainerInfo = trainers.find((t) => t._id === trainerId);
+          const trainerInfo = trainers.find((t) => t._id === applicantId);
           if (trainerInfo?.trainerCategory === "CONTRACTED") {
             setIsContractedTrainer(true);
           }
@@ -1194,7 +1337,7 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
 
   const getCurrentBalance = (leaveType) => {
     if (!trainerBalance) return 0;
-    
+
     const balance = trainerBalance[leaveType.toLowerCase()];
     if (typeof balance === "object") {
       return balance.available || 0;
@@ -1205,7 +1348,7 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
   const calculateNewBalance = () => {
     const currentBalance = getCurrentBalance(balanceData.leaveType);
     const amount = Number(balanceData.amount) || 0;
-    
+
     if (balanceData.actionType === "ADD") {
       return currentBalance + amount;
     } else {
@@ -1236,10 +1379,12 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
 
     // Get current balance for validation
     const currentBalance = getCurrentBalance(balanceData.leaveType);
-    
+
     // For DEDUCT action, check if we have enough balance
     if (balanceData.actionType === "DEDUCT" && amount > currentBalance) {
-      alert(`Cannot deduct ${amount} days. Current ${balanceData.leaveType} balance is only ${currentBalance} days.`);
+      alert(
+        `Cannot deduct ${amount} days. Current ${balanceData.leaveType} balance is only ${currentBalance} days.`,
+      );
       return;
     }
 
@@ -1247,14 +1392,14 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
     if (balanceData.leaveType === "PAID" && currentBalance >= 9999) {
       const confirmed = window.confirm(
         "⚠️ PAID LEAVE IS UNLIMITED ⚠️\n\n" +
-        "Paid leave balance is already set to Unlimited.\n" +
-        "Are you sure you want to update the balance?"
+          "Paid leave balance is already set to Unlimited.\n" +
+          "Are you sure you want to update the balance?",
       );
       if (!confirmed) return;
     }
 
     const newBalance = calculateNewBalance();
-    
+
     setIsSubmitting(true);
     try {
       await onUpdateBalance(
@@ -1265,8 +1410,10 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
       );
 
       // Show success message
-      alert(`${balanceData.actionType === "ADD" ? 'Added' : 'Deducted'} ${amount} days ${balanceData.actionType === "ADD" ? 'to' : 'from'} ${balanceData.leaveType} leave successfully!`);
-      
+      alert(
+        `${balanceData.actionType === "ADD" ? "Added" : "Deducted"} ${amount} days ${balanceData.actionType === "ADD" ? "to" : "from"} ${balanceData.leaveType} leave successfully!`,
+      );
+
       // Reset form
       setBalanceData({
         leaveType: "CASUAL",
@@ -1277,12 +1424,11 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
 
       // Refresh trainer balance data
       await handleTrainerSelect(selectedTrainer);
-      
+
       // Refresh the page after 1 second to show updated data
       setTimeout(() => {
         window.location.reload();
       }, 1000);
-
     } catch (error) {
       console.error("Error updating balance:", error);
       alert("Failed to update balance. Please try again.");
@@ -1294,10 +1440,10 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
   // Helper to check if deduction is valid
   const isDeductValid = () => {
     if (balanceData.actionType !== "DEDUCT") return true;
-    
+
     const amount = Number(balanceData.amount);
     const currentBalance = getCurrentBalance(balanceData.leaveType);
-    
+
     return !isNaN(amount) && amount > 0 && amount <= currentBalance;
   };
 
@@ -1463,7 +1609,9 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
                         Paid Leave
                       </span>
                       <span className="font-bold text-purple-600">
-                        {getCurrentBalance("PAID") >= 9999 ? "Unlimited" : getCurrentBalance("PAID")}
+                        {getCurrentBalance("PAID") >= 9999
+                          ? "Unlimited"
+                          : getCurrentBalance("PAID")}
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-500">
@@ -1486,7 +1634,9 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
                       <div className="text-center">
                         <div>Available</div>
                         <div className="font-medium">
-                          {getCurrentBalance("PAID") >= 9999 ? "∞" : getCurrentBalance("PAID")}
+                          {getCurrentBalance("PAID") >= 9999
+                            ? "∞"
+                            : getCurrentBalance("PAID")}
                         </div>
                       </div>
                     </div>
@@ -1520,10 +1670,7 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
               </div>
             </div>
           ) : (
-            <form
-              onSubmit={handleSubmit}
-              className="bg-gray-50 rounded-xl p-6"
-            >
+            <form onSubmit={handleSubmit} className="bg-gray-50 rounded-xl p-6">
               <h3 className="font-medium text-gray-800 mb-4">
                 Update Leave Balance
               </h3>
@@ -1577,7 +1724,7 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
                       <PlusCircle className="w-5 h-5" />
                       <span className="font-medium">Add Days</span>
                     </button>
-                    
+
                     <button
                       type="button"
                       onClick={() =>
@@ -1603,23 +1750,25 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
                 {/* Amount Input */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {balanceData.actionType === "ADD" ? "Days to Add" : "Days to Deduct"}
+                    {balanceData.actionType === "ADD"
+                      ? "Days to Add"
+                      : "Days to Deduct"}
                   </label>
                   <input
                     type="number"
                     value={balanceData.amount}
                     onChange={(e) => {
                       // Remove any decimal values
-                      const value = e.target.value.includes('.') 
-                        ? e.target.value.split('.')[0]
+                      const value = e.target.value.includes(".")
+                        ? e.target.value.split(".")[0]
                         : e.target.value;
-                      
+
                       // Remove any negative values
-                      const cleanValue = value.replace(/[^0-9]/g, '');
-                      
+                      const cleanValue = value.replace(/[^0-9]/g, "");
+
                       // Ensure minimum value is 1
-                      const finalValue = cleanValue === '0' ? '1' : cleanValue;
-                      
+                      const finalValue = cleanValue === "0" ? "1" : cleanValue;
+
                       setBalanceData((prev) => ({
                         ...prev,
                         amount: finalValue,
@@ -1627,7 +1776,7 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
                     }}
                     onKeyPress={(e) => {
                       // Prevent decimal point, negative sign, and 'e' (scientific notation)
-                      if (['.', '-', 'e', 'E'].includes(e.key)) {
+                      if ([".", "-", "e", "E"].includes(e.key)) {
                         e.preventDefault();
                       }
                     }}
@@ -1664,57 +1813,79 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
                 </div>
 
                 {/* Preview Section */}
-                {selectedTrainer && balanceData.amount && !isNaN(balanceData.amount) && balanceData.amount > 0 && (
-                  <div className={`p-4 border rounded-lg ${
-                    balanceData.actionType === "DEDUCT" && !isDeductValid()
-                      ? "bg-red-50 border-red-200"
-                      : "bg-blue-50 border-blue-200"
-                  }`}>
-                    <h4 className={`font-medium mb-2 ${
-                      balanceData.actionType === "DEDUCT" && !isDeductValid()
-                        ? "text-red-800"
-                        : "text-blue-800"
-                    }`}>
-                      Preview
-                    </h4>
-                    <div className={`text-sm space-y-1 ${
-                      balanceData.actionType === "DEDUCT" && !isDeductValid()
-                        ? "text-red-700"
-                        : "text-blue-700"
-                    }`}>
-                      <div className="flex justify-between">
-                        <span>Current {balanceData.leaveType} Balance:</span>
-                        <span className="font-medium">{getCurrentBalance(balanceData.leaveType)} days</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Action:</span>
-                        <span className="font-medium">
-                          {balanceData.actionType === "ADD" ? (
-                            <span className="text-green-600">+{balanceData.amount} days</span>
-                          ) : (
-                            <span className="text-red-600">-{balanceData.amount} days</span>
-                          )}
-                        </span>
-                      </div>
-                      {balanceData.actionType === "DEDUCT" && !isDeductValid() && (
-                        <div className="text-red-600 text-xs font-medium mt-2">
-                          ⚠️ Warning: Cannot deduct {balanceData.amount} days. Available balance is only {getCurrentBalance(balanceData.leaveType)} days.
+                {selectedTrainer &&
+                  balanceData.amount &&
+                  !isNaN(balanceData.amount) &&
+                  balanceData.amount > 0 && (
+                    <div
+                      className={`p-4 border rounded-lg ${
+                        balanceData.actionType === "DEDUCT" && !isDeductValid()
+                          ? "bg-red-50 border-red-200"
+                          : "bg-blue-50 border-blue-200"
+                      }`}
+                    >
+                      <h4
+                        className={`font-medium mb-2 ${
+                          balanceData.actionType === "DEDUCT" &&
+                          !isDeductValid()
+                            ? "text-red-800"
+                            : "text-blue-800"
+                        }`}
+                      >
+                        Preview
+                      </h4>
+                      <div
+                        className={`text-sm space-y-1 ${
+                          balanceData.actionType === "DEDUCT" &&
+                          !isDeductValid()
+                            ? "text-red-700"
+                            : "text-blue-700"
+                        }`}
+                      >
+                        <div className="flex justify-between">
+                          <span>Current {balanceData.leaveType} Balance:</span>
+                          <span className="font-medium">
+                            {getCurrentBalance(balanceData.leaveType)} days
+                          </span>
                         </div>
-                      )}
-                      <div className="flex justify-between border-t pt-1">
-                        <span className="font-medium">New Balance:</span>
-                        <span className="font-bold">
-                          {calculateNewBalance()} days
-                        </span>
+                        <div className="flex justify-between">
+                          <span>Action:</span>
+                          <span className="font-medium">
+                            {balanceData.actionType === "ADD" ? (
+                              <span className="text-green-600">
+                                +{balanceData.amount} days
+                              </span>
+                            ) : (
+                              <span className="text-red-600">
+                                -{balanceData.amount} days
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        {balanceData.actionType === "DEDUCT" &&
+                          !isDeductValid() && (
+                            <div className="text-red-600 text-xs font-medium mt-2">
+                              ⚠️ Warning: Cannot deduct {balanceData.amount}{" "}
+                              days. Available balance is only{" "}
+                              {getCurrentBalance(balanceData.leaveType)} days.
+                            </div>
+                          )}
+                        <div className="flex justify-between border-t pt-1">
+                          <span className="font-medium">New Balance:</span>
+                          <span className="font-bold">
+                            {calculateNewBalance()} days
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Submit Button */}
                 <button
                   type="submit"
-                  disabled={!selectedTrainer || isSubmitting || 
+                  disabled={
+                    !selectedTrainer ||
+                    isSubmitting ||
                     (balanceData.actionType === "DEDUCT" && !isDeductValid())
                   }
                   className={`w-full py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${
@@ -1733,12 +1904,14 @@ function BalanceManagementTab({ trainers, loading, onUpdateBalance }) {
                   ) : balanceData.actionType === "ADD" ? (
                     <>
                       <Plus className="w-5 h-5" />
-                      Add {balanceData.amount || "0"} Days to {balanceData.leaveType} Leave
+                      Add {balanceData.amount || "0"} Days to{" "}
+                      {balanceData.leaveType} Leave
                     </>
                   ) : (
                     <>
                       <Minus className="w-5 h-5" />
-                      Deduct {balanceData.amount || "0"} Days from {balanceData.leaveType} Leave
+                      Deduct {balanceData.amount || "0"} Days from{" "}
+                      {balanceData.leaveType} Leave
                     </>
                   )}
                 </button>

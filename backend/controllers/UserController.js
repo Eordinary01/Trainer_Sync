@@ -142,38 +142,72 @@ export class UserController {
 
   async updateProfile(req, res, next) {
     try {
-      const userId = req.params.id || req.user?.userId;
-      if (!userId) {
-        return res.status(400).json({
+      // Get user ID from params (admin editing) or from authenticated user
+      const targetUserId = req.params.userId || req.user.userId;
+      
+      // Check permission: Users can only edit their own profile unless they are ADMIN/HR
+      if (targetUserId !== req.user.userId && !['ADMIN', 'HR'].includes(req.user.role)) {
+        return res.status(403).json({
           success: false,
-          message: "User ID is required"
+          message: 'You do not have permission to edit this profile'
         });
       }
 
-      const updated = await this.userService.updateTrainerProfile(userId, req.body);
+      // Extract allowed fields only
+      const { profile } = req.body;
+      
+      // Define restricted fields that cannot be edited
+      const restrictedFields = [
+        'employeeId',
+        'reportingManager',
+        'email',
+        'joiningDate',
+        'client.name',
+        'client.address'
+      ];
+
+      // Check if any restricted fields are being updated
+      const updateData = { profile: {} };
+      
+      // Only allow updating firstName, lastName, phone, and skills
+      if (profile) {
+        if (profile.firstName) updateData.profile.firstName = profile.firstName;
+        if (profile.lastName) updateData.profile.lastName = profile.lastName;
+        if (profile.phone) updateData.profile.phone = profile.phone;
+        
+        // Handle skills - ensure it's an array
+        if (profile.skills) {
+          if (!Array.isArray(profile.skills)) {
+            throw new ValidationError('Skills must be an array');
+          }
+          updateData.profile.skills = profile.skills;
+        }
+
+        // Check for any restricted fields in the request
+        const hasRestrictedFields = restrictedFields.some(field => {
+          const keys = field.split('.');
+          let value = profile;
+          for (const key of keys) {
+            if (!value || !value[key]) return false;
+            value = value[key];
+          }
+          return value !== undefined;
+        });
+
+        if (hasRestrictedFields) {
+          throw new ValidationError('Cannot modify restricted fields: employeeId, reportingManager, email, joiningDate, client information');
+        }
+      }
+
+      const updatedUser = await this.userService.updateProfile(targetUserId, updateData);
       
       res.status(200).json({
         success: true,
-        message: "Profile updated successfully",
-        data: updated,
+        message: 'Profile updated successfully',
+        data: updatedUser
       });
+
     } catch (error) {
-      console.error("updateProfile error:", error);
-      
-      if (error.name === 'NotFoundError') {
-        return res.status(404).json({
-          success: false,
-          message: error.message
-        });
-      }
-      
-      if (error.name === 'ValidationError' || error.name === 'ConflictError') {
-        return res.status(400).json({
-          success: false,
-          message: error.message
-        });
-      }
-      
       next(error);
     }
   }
@@ -302,37 +336,51 @@ export class UserController {
       next(error);
     }
   }
+  async getTotalTrainersCount(req, res, next) {
+  try {
+    const count = await this.userService.getTotalTrainersCount();
+    
+    res.json({
+      success: true,
+      data: { count },
+      message: 'Total trainers count fetched successfully'
+    });
+  } catch (error) {
+    console.error('Error fetching total trainers count:', error);
+    next(error);
+  }
+}
 
   async getUsersCountByRole(req, res, next) {
-    try {
-      const { role } = req.query;
-      
-      if (!role) {
-        return res.status(400).json({
-          success: false,
-          message: "Role parameter is required"
-        });
-      }
-
-      const count = await this.userService.getUsersCountByRole(role);
-
-      res.json({
-        success: true,
-        data: { count },
-        message: 'Users count fetched successfully'
+  try {
+    const { role, status } = req.query;
+    
+    if (!role) {
+      return res.status(400).json({
+        success: false,
+        message: "Role parameter is required"
       });
-    } catch (error) {
-      console.error('Error fetching users count:', error);
-      next(error);
     }
+
+    const count = await this.userService.getUsersCountByRole(role, status);
+    
+    res.json({
+      success: true,
+      data: { count },
+      message: 'Users count fetched successfully'
+    });
+  } catch (error) {
+    console.error('Error fetching users count:', error);
+    next(error);
   }
+}
 
   async getActiveTrainersCount(req, res, next) {
     try {
       const count = await this.userService.getActiveTrainersCount();
 
       res.json({
-        success: false,
+        success: true,
         data: { count },
         message: 'Active trainers count fetched successfully'
       });

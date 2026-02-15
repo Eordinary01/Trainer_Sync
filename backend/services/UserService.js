@@ -59,120 +59,73 @@ export class UserService {
     return user;
   }
 
-  async updateTrainerProfile(userId, updates) {
-    try {
-      const user = await User.findById(userId);
+  async updateProfile(userId, updateData) {
+    const user = await User.findById(userId);
 
-      if (!user) {
-        throw new NotFoundError("User not found");
-      }
-
-      // Update basic fields (only if provided)
-      if (updates.email && updates.email !== user.email) {
-        const existingEmail = await User.findOne({
-          email: updates.email,
-          _id: { $ne: userId },
-        });
-        if (existingEmail) {
-          throw new ConflictError("Email already in use");
-        }
-        user.email = updates.email;
-      }
-
-      if (updates.username && updates.username !== user.username) {
-        const existingUsername = await User.findOne({
-          username: updates.username,
-          _id: { $ne: userId },
-        });
-        if (existingUsername) {
-          throw new ConflictError("Username already in use");
-        }
-        user.username = updates.username;
-      }
-
-      if (updates.status) {
-        if (
-          !["ACTIVE", "INACTIVE", "ON_LEAVE", "SUSPENDED"].includes(
-            updates.status,
-          )
-        ) {
-          throw new ValidationError("Invalid status");
-        }
-        user.status = updates.status;
-      }
-
-      // Update profile fields (only if provided)
-      if (updates.profile) {
-        // Update each profile field only if it's provided in the update
-        if (updates.profile.firstName !== undefined)
-          user.profile.firstName = updates.profile.firstName;
-        if (updates.profile.lastName !== undefined)
-          user.profile.lastName = updates.profile.lastName;
-        if (updates.profile.phone !== undefined)
-          user.profile.phone = updates.profile.phone;
-        if (updates.profile.dateOfBirth !== undefined)
-          user.profile.dateOfBirth = updates.profile.dateOfBirth;
-        if (updates.profile.gender !== undefined)
-          user.profile.gender = updates.profile.gender;
-        if (updates.profile.address !== undefined)
-          user.profile.address = updates.profile.address;
-        if (updates.profile.city !== undefined)
-          user.profile.city = updates.profile.city;
-        if (updates.profile.state !== undefined)
-          user.profile.state = updates.profile.state;
-        if (updates.profile.zipCode !== undefined)
-          user.profile.zipCode = updates.profile.zipCode;
-        if (updates.profile.country !== undefined)
-          user.profile.country = updates.profile.country;
-        if (updates.profile.employeeId !== undefined)
-          user.profile.employeeId = updates.profile.employeeId;
-        if (updates.profile.department !== undefined)
-          user.profile.department = updates.profile.department;
-        if (updates.profile.designation !== undefined)
-          user.profile.designation = updates.profile.designation;
-        if (updates.profile.qualification !== undefined)
-          user.profile.qualification = updates.profile.qualification;
-        if (updates.profile.experience !== undefined)
-          user.profile.experience = updates.profile.experience;
-        if (updates.profile.bio !== undefined)
-          user.profile.bio = updates.profile.bio;
-        if (updates.profile.joiningDate !== undefined)
-          user.profile.joiningDate = updates.profile.joiningDate;
-      }
-
-      if (
-        updates.trainerCategory &&
-        updates.trainerCategory !== user.trainerCategory
-      ) {
-        const validCategories = Object.values(TRAINER_CATEGORY);
-        if (!validCategories.includes(updates.trainerCategory)) {
-          throw new ValidationError("Invalid trainer category");
-        }
-
-        user.trainerCategory = updates.trainerCategory;
-
-        // Re-initialize leave balance for new category
-        await leaveService.initializeLeaveBalance(
-          userId,
-          updates.trainerCategory,
-        );
-      }
-      // Update client information if provided
-      if (updates.client) {
-        user.profile.client = {
-          ...user.profile.client,
-          ...updates.client,
-        };
-      }
-
-      // Save and return updated user
-      await user.save();
-
-      // Return without password
-      return user.toJSON();
-    } catch (error) {
-      throw error;
+    if (!user) {
+      throw new NotFoundError("User not found");
     }
+
+    // Check if user is locked
+    if (user.isLocked && user.isLocked()) {
+      throw new ValidationError("Account is locked. Cannot update profile.");
+    }
+
+    // Update allowed profile fields
+    if (updateData.profile) {
+      // Initialize profile if it doesn't exist
+      if (!user.profile) {
+        user.profile = {};
+      }
+
+      // Update firstName
+      if (updateData.profile.firstName !== undefined) {
+        user.profile.firstName = updateData.profile.firstName;
+      }
+
+      // Update lastName
+      if (updateData.profile.lastName !== undefined) {
+        user.profile.lastName = updateData.profile.lastName;
+      }
+
+      // Update phone
+      if (updateData.profile.phone !== undefined) {
+        user.profile.phone = updateData.profile.phone;
+      }
+
+      // Update skills - ensure it's an array and filter out empty/duplicate values
+      if (updateData.profile.skills !== undefined) {
+        if (!Array.isArray(updateData.profile.skills)) {
+          throw new ValidationError("Skills must be an array");
+        }
+
+        // Clean skills: trim, remove empty, remove duplicates, limit to 20
+        const cleanedSkills = [
+          ...new Set(
+            updateData.profile.skills
+              .map((skill) => skill?.toString().trim())
+              .filter((skill) => skill && skill.length > 0)
+              .slice(0, 20),
+          ),
+        ];
+
+        user.profile.skills = cleanedSkills;
+      }
+    }
+
+    // Set updated timestamp
+    user.updatedAt = new Date();
+
+    await user.save();
+
+    // ✅ FIXED: Return user without sensitive data using User.findById directly
+    const updatedUser = await User.findById(userId)
+      .select(
+        "-password -passwordResetToken -passwordResetExpire -loginAttempts -lockUntil",
+      )
+      .lean();
+
+    return updatedUser;
   }
 
   async getAllTrainers(filters = {}, page = 1, limit = 10) {
@@ -304,14 +257,24 @@ export class UserService {
     }
   }
 
-  async getUsersCountByRole(role) {
-    try {
-      const count = await User.countDocuments({ role });
-      return count;
-    } catch (error) {
-      throw error;
-    }
+  async getTotalTrainersCount() {
+    const count = await User.countDocuments({
+      role: "TRAINER",
+      // NO status filter here - count ALL trainers
+    });
+    return count;
   }
+
+ async getUsersCountByRole(role, status = null) {
+  const query = { role };
+  
+  // Only add status filter if specifically provided
+  if (status) {
+    query.status = status;
+  }
+  
+  return await User.countDocuments(query);
+}
 
   async getActiveTrainersCount() {
     try {

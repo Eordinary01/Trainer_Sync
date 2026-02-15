@@ -14,6 +14,9 @@ import { LeaveService } from './LeaveService.js'; // Import LeaveService
 export class AuthService {
   constructor() {
     this.leaveService = new LeaveService(); // Initialize LeaveService
+
+
+    this.resetAttempts = new Map();
   }
 
   async register(username, email, password, role = 'TRAINER', profile = {}, trainerCategory = 'PERMANENT') {
@@ -189,41 +192,77 @@ export class AuthService {
   }
 
   async requestPasswordReset(email) {
+    // ✅ Rate limiting by IP should be done in middleware
+    // This method only handles the business logic
+    
     const user = await User.findOne({ email });
+    
+    // ✅ GENERIC RESPONSE - Don't reveal if user exists or not
+    // Always return success, even if user doesn't exist
     if (!user) {
-      throw new NotFoundError('User not found');
+      console.log(`🔐 Password reset requested for non-existent email: ${email}`);
+      return {
+        success: true,
+        // Return dummy data for consistent response structure
+        token: null,
+        user: null
+      };
     }
 
     // ✅ Check if account is locked
     if (user.isLocked()) {
-      throw new AuthenticationError('Account is locked. Please contact administrator.');
+      console.log(`🔐 Password reset requested for locked account: ${email}`);
+      // Still return success to not reveal account status
+      return {
+        success: true,
+        token: null,
+        user: null
+      };
     }
 
-    const { token, hash } = Encryption.generatePasswordResetToken();
-    user.passwordResetToken = hash;
-    user.passwordResetExpire = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour
+    // ✅ Generate reset token (6-digit numeric for better UX)
+    const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedToken = Encryption.hashToken(resetToken);
+    
+    // ✅ Store hashed token and expiry (15 minutes for better security)
+    user.passwordResetToken = hashedToken;
+    user.passwordResetExpire = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
     await user.save();
 
-    // ✅ Return user details for email template
+    console.log(`✅ Password reset token generated for user: ${user._id}`);
+
     return {
-      token,
+      success: true,
+      token: resetToken, // Send plain token for email
       user: {
         id: user._id,
         email: user.email,
         username: user.username,
-        name: user.profile?.firstName ? `${user.profile.firstName} ${user.profile.lastName || ''}`.trim() : user.username
+        name: user.profile?.firstName 
+          ? `${user.profile.firstName} ${user.profile.lastName || ''}`.trim() 
+          : user.username
       }
     };
   }
 
-  async resetPassword(token, newPassword) {
+
+   async resetPassword(token, newPassword) {
+    // ✅ Validate password strength
+    const passwordValidation = Validators.validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      throw new ValidationError('Password does not meet security requirements');
+    }
+
+    // ✅ Hash the provided token to compare with stored hash
     const hashedToken = Encryption.hashToken(token);
+    
     const user = await User.findOne({
       passwordResetToken: hashedToken,
       passwordResetExpire: { $gt: Date.now() },
-    });
+    }).select('+password +isFirstLogin');
 
     if (!user) {
+      // ✅ Generic error message - don't specify if token is invalid or expired
       throw new AuthenticationError('Invalid or expired reset token');
     }
 
@@ -232,18 +271,28 @@ export class AuthService {
       throw new AuthenticationError('Account is locked. Please contact administrator.');
     }
 
-    const passwordValidation = Validators.validatePassword(newPassword);
-    if (!passwordValidation.isValid) {
-      throw new ValidationError('Password does not meet requirements');
+    // ✅ Check if new password is same as old password
+    const isSamePassword = await user.comparePassword(newPassword);
+    if (isSamePassword) {
+      throw new ValidationError('New password cannot be the same as old password');
     }
 
+    // ✅ Update password and clear reset fields
     user.password = newPassword;
     user.passwordResetToken = undefined;
     user.passwordResetExpire = undefined;
-    user.isFirstLogin = false; // ✅ Reset isFirstLogin flag
+    user.isFirstLogin = false;
+    user.passwordChangedAt = new Date();
+    
+    // ✅ Reset login attempts on successful password reset
+    await user.resetLoginAttempts();
+    
     await user.save();
 
-    return { 
+    console.log(`✅ Password reset successful for user: ${user._id}`);
+
+    return {
+      success: true,
       message: 'Password reset successful',
       user: {
         id: user._id,

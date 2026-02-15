@@ -7,6 +7,9 @@ import {
   CheckCircle,
   XCircle,
   Download,
+  MoreVertical,
+  ChevronDown,
+  
 } from "lucide-react";
 import api from "../../config/api.js";
 
@@ -35,7 +38,7 @@ export function PendingLeaves() {
   const { user } = useAuth();
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLeave, setSelectedLeave] = useState(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState(null); // Track which leave's action menu is open
   const [remarks, setRemarks] = useState("");
   const [processingLeaveId, setProcessingLeaveId] = useState(null);
   const [processingAction, setProcessingAction] = useState(null); // 'approve' or 'reject'
@@ -46,6 +49,7 @@ export function PendingLeaves() {
 
   const loadPendingLeaves = async () => {
     try {
+      setLoading(true);
       const response = await api.get("/leaves/pending");
       setLeaves(response.data.data || []);
     } catch (error) {
@@ -64,7 +68,8 @@ export function PendingLeaves() {
         comments: remarks,
         remarks: remarks,
       });
-      setSelectedLeave(null);
+      // Close action menu and reset remarks
+      setOpenActionMenuId(null);
       setRemarks("");
       await loadPendingLeaves();
       alert("Leave approved successfully!");
@@ -93,7 +98,8 @@ export function PendingLeaves() {
         comments: remarks,
         remarks: remarks,
       });
-      setSelectedLeave(null);
+      // Close action menu and reset remarks
+      setOpenActionMenuId(null);
       setRemarks("");
       await loadPendingLeaves();
       alert("Leave rejected successfully!");
@@ -108,22 +114,21 @@ export function PendingLeaves() {
     }
   };
 
-  const handleQuickAction = async (leaveId, action) => {
-    if (action === "reject") {
-      setSelectedLeave(leaves.find((l) => l._id === leaveId));
-      return;
-    }
-
+  const handleQuickApprove = async (leaveId) => {
     setProcessingLeaveId(leaveId);
-    setProcessingAction(action);
+    setProcessingAction("approve");
 
     try {
-      await api.put(`/leaves/${leaveId}/${action}`, {});
+      await api.post(`/leaves/${leaveId}/approve`, {
+        comments: "Leave approved without remarks",
+        remarks: "Leave approved without remarks",
+      });
+      setOpenActionMenuId(null);
       await loadPendingLeaves();
-      alert(`Leave ${action}d successfully!`);
+      alert("Leave approved successfully!");
     } catch (error) {
       alert(
-        `Failed to ${action} leave: ` +
+        `Failed to approve leave: ` +
           (error.response?.data?.message || error.message),
       );
     } finally {
@@ -140,11 +145,14 @@ export function PendingLeaves() {
     });
   };
 
-  const calculateDays = (startDate, endDate) => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = Math.abs(end - start);
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  const toggleActionMenu = (leaveId) => {
+    if (openActionMenuId === leaveId) {
+      setOpenActionMenuId(null);
+      setRemarks("");
+    } else {
+      setOpenActionMenuId(leaveId);
+      setRemarks("");
+    }
   };
 
   const isProcessing = (leaveId, action = null) => {
@@ -152,6 +160,19 @@ export function PendingLeaves() {
     if (processingLeaveId !== leaveId) return false;
     if (action && processingAction !== action) return false;
     return true;
+  };
+
+  const getLeaveStatusColor = (status) => {
+    switch (status) {
+      case "APPROVED":
+        return "bg-green-100 text-green-800";
+      case "REJECTED":
+        return "bg-red-100 text-red-800";
+      case "PENDING":
+        return "bg-yellow-100 text-yellow-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
   };
 
   if (loading) {
@@ -174,6 +195,9 @@ export function PendingLeaves() {
         <p className="text-gray-600">
           Review and manage pending leave applications
         </p>
+        <div className="mt-2 text-sm text-gray-500">
+          Total: {leaves.length} pending request{leaves.length !== 1 ? "s" : ""}
+        </div>
       </div>
 
       {leaves.length === 0 ? (
@@ -209,37 +233,104 @@ export function PendingLeaves() {
 
               <div className="flex justify-between items-start mb-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <User className="text-gray-400" size={20} />
-                    <h3 className="font-semibold text-gray-800 text-lg">
-                      {leave.trainerId?.profile?.firstName}{" "}
-                      {leave.trainerId?.profile?.lastName}
-                    </h3>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <User className="text-blue-600" size={20} />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-800 text-lg">
+                          {leave.trainerId?.profile?.firstName}{" "}
+                          {leave.trainerId?.profile?.lastName}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {leave.trainerId?.profile?.employeeId || "No Employee ID"}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getLeaveStatusColor(leave.status)}`}>
+                        {leave.status}
+                      </span>
+                      
+                      {/* Actions Button */}
+                      <div className="relative">
+                        <button
+                          onClick={() => toggleActionMenu(leave._id)}
+                          disabled={isProcessing(leave._id)}
+                          className={`flex items-center gap-1 px-3 py-2 rounded-lg border transition-colors ${
+                            openActionMenuId === leave._id
+                              ? "bg-blue-50 border-blue-200 text-blue-700"
+                              : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          <MoreVertical size={16} />
+                          <span>Actions</span>
+                          <ChevronDown 
+                            size={14} 
+                            className={`transition-transform ${
+                              openActionMenuId === leave._id ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {/* Action Menu Dropdown */}
+                        {openActionMenuId === leave._id && (
+                          <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                            <div className="py-1">
+                              <button
+                                onClick={() => handleQuickApprove(leave._id)}
+                                disabled={isProcessing(leave._id, "approve")}
+                                className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 flex items-center gap-2 disabled:opacity-50"
+                              >
+                                <CheckCircle size={14} />
+                                <span>Approve without remarks</span>
+                              </button>
+                              <div className="border-t border-gray-100"></div>
+                              <button
+                                onClick={() => {
+                                  // Keep menu open for remarks input
+                                }}
+                                disabled={isProcessing(leave._id)}
+                                className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 flex items-center gap-2 disabled:opacity-50"
+                              >
+                                <XCircle size={14} />
+                                <span>Reject with remarks</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
-                    <div>
-                      <p className="text-sm text-gray-600">Leave Type</p>
-                      <p className="font-medium capitalize">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-sm text-gray-600 mb-1">Leave Type</p>
+                      <p className="font-medium capitalize text-gray-800">
                         {leave.leaveType.toLowerCase()}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Duration</p>
-                      <p className="font-medium">{leave.numberOfDays} days</p>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-sm text-gray-600 mb-1">Duration</p>
+                      <p className="font-medium text-gray-800">
+                        {leave.numberOfDays} day{leave.numberOfDays !== 1 ? "s" : ""}
+                      </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Dates</p>
-                      <p className="font-medium">
-                        {formatDate(leave.fromDate)} -{" "}
-                        {formatDate(leave.toDate)}
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-sm text-gray-600 mb-1">Dates</p>
+                      <p className="font-medium text-gray-800">
+                        {formatDate(leave.fromDate)} - {formatDate(leave.toDate)}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mb-3">
+                  <div className="mb-4">
                     <p className="text-sm text-gray-600 mb-1">Reason</p>
-                    <p className="text-gray-800">{leave.reason}</p>
+                    <p className="text-gray-800 bg-gray-50 p-3 rounded-lg">
+                      {leave.reason}
+                    </p>
                   </div>
 
                   {leave.emergencyContact && (
@@ -256,64 +347,26 @@ export function PendingLeaves() {
                     <span>Applied on {formatDate(leave.createdAt)}</span>
                   </div>
                 </div>
-
-                <div className="flex gap-2 ml-4">
-                  <button
-                    onClick={() => handleQuickAction(leave._id, "approve")}
-                    disabled={isProcessing(leave._id)}
-                    className={`bg-green-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 min-w-[100px] justify-center
-                      ${
-                        isProcessing(leave._id, "approve")
-                          ? "opacity-75 cursor-not-allowed"
-                          : "hover:bg-green-700"
-                      }`}
-                  >
-                    {isProcessing(leave._id, "approve") ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>Approving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle size={16} />
-                        <span>Approve</span>
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => setSelectedLeave(leave)}
-                    disabled={isProcessing(leave._id)}
-                    className={`bg-red-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 min-w-[100px] justify-center
-                      ${
-                        isProcessing(leave._id)
-                          ? "opacity-75 cursor-not-allowed"
-                          : "hover:bg-red-700"
-                      }`}
-                  >
-                    <XCircle size={16} />
-                    Reject
-                  </button>
-                </div>
               </div>
 
-              {selectedLeave?._id === leave._id && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              {/* Remarks Section - Only shown when this leave's action menu is open */}
+              {openActionMenuId === leave._id && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <h4 className="font-semibold text-gray-800 mb-2">
-                    Add Remarks
+                    Add Remarks (Optional for approval, Required for rejection)
                   </h4>
                   <textarea
                     value={remarks}
                     onChange={(e) => setRemarks(e.target.value)}
                     rows="3"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
                     placeholder="Enter remarks for approval or rejection..."
                     disabled={isProcessing(leave._id)}
                   />
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => {
-                        setSelectedLeave(null);
+                        setOpenActionMenuId(null);
                         setRemarks("");
                       }}
                       disabled={isProcessing(leave._id)}
@@ -324,13 +377,12 @@ export function PendingLeaves() {
 
                     <button
                       onClick={() => handleReject(leave._id)}
-                      disabled={isProcessing(leave._id)}
-                      className={`bg-red-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2
-                        ${
-                          isProcessing(leave._id)
-                            ? "opacity-75 cursor-not-allowed"
-                            : "hover:bg-red-700"
-                        }`}
+                      disabled={isProcessing(leave._id) || !remarks.trim()}
+                      className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                        remarks.trim()
+                          ? "bg-red-600 text-white hover:bg-red-700"
+                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      } disabled:opacity-50`}
                     >
                       {isProcessing(leave._id, "reject") ? (
                         <>
@@ -340,7 +392,7 @@ export function PendingLeaves() {
                       ) : (
                         <>
                           <XCircle size={16} />
-                          <span>Reject with Remarks</span>
+                          <span>Reject</span>
                         </>
                       )}
                     </button>
@@ -348,12 +400,7 @@ export function PendingLeaves() {
                     <button
                       onClick={() => handleApprove(leave._id)}
                       disabled={isProcessing(leave._id)}
-                      className={`bg-green-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2
-                        ${
-                          isProcessing(leave._id)
-                            ? "opacity-75 cursor-not-allowed"
-                            : "hover:bg-green-700"
-                        }`}
+                      className={`bg-green-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 hover:bg-green-700 disabled:opacity-50`}
                     >
                       {isProcessing(leave._id, "approve") ? (
                         <>
@@ -536,9 +583,11 @@ export function LeaveReports() {
   const { user } = useAuth();
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState(null);
 
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
+  const [roleFilter, setRoleFilter] = useState("ALL"); // Simple dropdown filter
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
@@ -553,12 +602,18 @@ export function LeaveReports() {
 
       if (response.data?.success && response.data?.data?.leaves) {
         leavesData = response.data.data.leaves;
+        if (response.data.data.pagination) {
+          setPagination(response.data.data.pagination);
+        } else if (response.data.meta) {
+          setPagination(response.data.meta);
+        }
       }
 
       setLeaves(leavesData);
     } catch (error) {
       console.error(error);
       setLeaves([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
@@ -597,16 +652,31 @@ export function LeaveReports() {
     }
   };
 
-  // ✅ Filtering Logic
+  const getRoleBadgeColor = (role) => {
+    switch (role) {
+      case "TRAINER":
+        return "bg-green-100 text-green-800";
+      case "HR":
+        return "bg-purple-100 text-purple-800";
+      case "ADMIN":
+        return "bg-blue-100 text-blue-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  // Filtering Logic with Role Filter
   const filteredLeaves = leaves.filter((leave) => {
     const trainer = leave.trainerId || leave.user;
+    const applicantRole = leave.applicantRole || leave.applicantId?.role || 'TRAINER';
 
     const employeeName = trainer?.profile
       ? `${trainer.profile.firstName || ""} ${trainer.profile.lastName || ""}`.toLowerCase()
-      : "";
+      : leave.applicantName?.toLowerCase() || "";
 
     if (statusFilter !== "ALL" && leave.status !== statusFilter) return false;
     if (typeFilter !== "ALL" && leave.leaveType !== typeFilter) return false;
+    if (roleFilter !== "ALL" && applicantRole !== roleFilter) return false;
     if (searchTerm && !employeeName.includes(searchTerm.toLowerCase()))
       return false;
 
@@ -617,7 +687,7 @@ export function LeaveReports() {
     return <div className="text-center py-10">Loading...</div>;
   }
 
-  // ✅ Reusable Stat Card
+  // Stat Card Component
   const StatCard = ({ label, count, status, color }) => {
     const isActive = statusFilter === status;
 
@@ -634,19 +704,42 @@ export function LeaveReports() {
     );
   };
 
+  // Helper function to get action name
+  const getActionByName = (leave) => {
+    if (leave.status === "APPROVED") {
+      return leave.approvedByName || leave.approvedBy?.profile?.firstName || "Admin";
+    } else if (leave.status === "REJECTED") {
+      return leave.rejectedByName || leave.rejectedBy?.profile?.firstName || "Admin";
+    }
+    return "—";
+  };
+
+  // Helper function to get action date
+  const getActionDate = (leave) => {
+    if (leave.status === "APPROVED") {
+      return leave.updatedAt;
+    } else if (leave.status === "REJECTED") {
+      return leave.rejectedAt || leave.updatedAt;
+    }
+    return null;
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-800">
           {user?.role === "ADMIN" || user?.role === "HR"
-            ? "All Leave Records"
+            ? "Leave Reports"
             : "My Leave History"}
         </h1>
-        <p className="text-gray-500">Showing {filteredLeaves.length} records</p>
+        <p className="text-gray-500 mt-1">
+          Showing {filteredLeaves.length} {filteredLeaves.length === 1 ? 'record' : 'records'}
+          {roleFilter !== "ALL" && ` • ${roleFilter.toLowerCase()} only`}
+        </p>
       </div>
 
-      {/* ✅ Clickable Stats */}
+      {/* Status Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard
           label="Total"
@@ -674,39 +767,56 @@ export function LeaveReports() {
         />
       </div>
 
-      {/* Filters */}
-      <div className="bg-white p-5 rounded-xl shadow-sm border">
-        <div className="grid md:grid-cols-3 gap-4">
+      {/* Simple Filter Bar */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Leave Type Filter */}
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="border px-3 py-2 rounded-lg"
+            className="border border-gray-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
-            <option value="ALL">All Leave Types</option>
+            <option value="ALL">All Types</option>
             <option value="CASUAL">Casual</option>
             <option value="SICK">Sick</option>
             <option value="PAID">Paid</option>
           </select>
 
+          {/* Role Filter Dropdown - Simple & Clean */}
+          {(user?.role === "ADMIN" || user?.role === "HR") && (
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="border border-gray-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="ALL">All Roles</option>
+              <option value="TRAINER">Trainers Only</option>
+              <option value="HR">HR Only</option>
+            </select>
+          )}
+
+          {/* Search Input */}
           {(user?.role === "ADMIN" || user?.role === "HR") && (
             <input
               type="text"
-              placeholder="Search employee..."
+              placeholder="Search by name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="border px-3 py-2 rounded-lg"
+              className="flex-1 min-w-[200px] border border-gray-300 px-3 py-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           )}
 
+          {/* Reset Button */}
           <button
             onClick={() => {
               setStatusFilter("ALL");
               setTypeFilter("ALL");
+              setRoleFilter("ALL");
               setSearchTerm("");
             }}
-            className="bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-2 text-sm"
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
-            Reset Filters
+            Reset
           </button>
         </div>
       </div>
@@ -719,39 +829,45 @@ export function LeaveReports() {
               {(user?.role === "ADMIN" || user?.role === "HR") && (
                 <th className="px-6 py-3 text-left">Employee</th>
               )}
-              <th className="px-6 py-3 text-left">Leave Type</th>
+              <th className="px-6 py-3 text-left">Type</th>
               <th className="px-6 py-3 text-left">Days</th>
               <th className="px-6 py-3 text-left">Dates</th>
               <th className="px-6 py-3 text-left">Status</th>
               <th className="px-6 py-3 text-left">Action By</th>
-              <th className="px-6 py-3 text-left">Applied On</th>
+              <th className="px-6 py-3 text-left">Applied</th>
             </tr>
           </thead>
 
           <tbody className="divide-y">
             {filteredLeaves.map((leave) => {
-              const trainer = leave.trainerId || leave.user;
+              const employeeName = 
+                leave.applicantName || 
+                (leave.trainerId?.profile 
+                  ? `${leave.trainerId.profile.firstName || ""} ${leave.trainerId.profile.lastName || ""}`
+                  : leave.user?.profile
+                  ? `${leave.user.profile.firstName || ""} ${leave.user.profile.lastName || ""}`
+                  : "Unknown");
 
-              const employeeName = trainer?.profile
-                ? `${trainer.profile.firstName || ""} ${trainer.profile.lastName || ""}`
-                : "Unknown";
-
-              const actionBy =
-                leave.status === "APPROVED" && leave.approvedBy?.profile
-                  ? `${leave.approvedBy.profile.firstName || ""} ${leave.approvedBy.profile.lastName || ""}`
-                  : leave.status === "REJECTED" && leave.rejectedBy?.profile
-                    ? `${leave.rejectedBy.profile.firstName || ""} ${leave.rejectedBy.profile.lastName || ""}`
-                    : "—";
+              const applicantRole = leave.applicantRole || leave.applicantId?.role || 'TRAINER';
+              const actionByName = getActionByName(leave);
+              const actionDate = getActionDate(leave);
 
               return (
-                <tr key={leave._id} className="hover:bg-gray-50">
+                <tr key={leave._id || leave.id} className="hover:bg-gray-50">
                   {(user?.role === "ADMIN" || user?.role === "HR") && (
-                    <td className="px-6 py-4">{employeeName}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{employeeName}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(applicantRole)}`}>
+                          {applicantRole}
+                        </span>
+                      </div>
+                    </td>
                   )}
 
                   <td className="px-6 py-4">
                     <span
-                      className={`px-2 py-1 rounded ${getLeaveTypeColor(
+                      className={`px-2 py-1 rounded text-xs font-medium ${getLeaveTypeColor(
                         leave.leaveType,
                       )}`}
                     >
@@ -759,15 +875,17 @@ export function LeaveReports() {
                     </span>
                   </td>
 
-                  <td className="px-6 py-4">{leave.numberOfDays}</td>
+                  <td className="px-6 py-4 font-medium text-sm">
+                    {leave.numberOfDays || leave.totalDays}d
+                  </td>
 
-                  <td className="px-6 py-4">
-                    {formatDate(leave.fromDate)} - {formatDate(leave.toDate)}
+                  <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
+                    {formatDate(leave.fromDate)}
                   </td>
 
                   <td className="px-6 py-4">
                     <span
-                      className={`px-2 py-1 rounded ${getStatusColor(
+                      className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(
                         leave.status,
                       )}`}
                     >
@@ -775,9 +893,19 @@ export function LeaveReports() {
                     </span>
                   </td>
 
-                  <td className="px-6 py-4">{actionBy}</td>
+                  <td className="px-6 py-4 text-sm">
+                    {actionByName !== "—" ? (
+                      <div>
+                        <span className={leave.status === "APPROVED" ? "text-green-600" : "text-red-600"}>
+                          {actionByName}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
 
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 text-sm text-gray-500">
                     {formatDate(leave.appliedOn || leave.createdAt)}
                   </td>
                 </tr>
@@ -785,7 +913,21 @@ export function LeaveReports() {
             })}
           </tbody>
         </table>
+
+        {/* No results */}
+        {filteredLeaves.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No leave records found</p>
+          </div>
+        )}
       </div>
+
+      {/* Pagination */}
+      {pagination && pagination.pages > 1 && (
+        <div className="text-sm text-gray-500 text-right">
+          Page {pagination.page || 1} of {pagination.pages || 1}
+        </div>
+      )}
     </div>
   );
 }
