@@ -714,119 +714,116 @@ export class LeaveService {
   // ============================================
   // ✅ APPLY LEAVE (Backward compatible)
   // ============================================
-  async applyLeave(userId, leaveData, userRole) {
-    try {
-      const {
-        leaveType,
-        fromDate,
-        toDate,
-        numberOfDays,
-        reason,
-        emergencyContact,
-      } = leaveData;
+ async applyLeave(userId, leaveData, userRole) {
+  try {
+    const {
+      leaveType,
+      fromDate,
+      toDate,
+      numberOfDays,
+      reason,
+      emergencyContact,
+    } = leaveData;
 
-      // Validate dates
-      if (!Validators.validateDateRange(fromDate, toDate)) {
-        throw new ValidationError("Invalid date range");
-      }
+    // Validate dates
+    if (!Validators.validateDateRange(fromDate, toDate)) {
+      throw new ValidationError("Invalid date range");
+    }
 
-      // Check user exists
-      const user = await User.findById(userId);
-      if (!user) {
-        throw new NotFoundError("User not found");
-      }
+    // Check user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
 
-      // Role-specific validations
-      if (userRole === "HR") {
-        console.log(`✅ HR user ${user.username} applying for ${leaveType} leave (unlimited)`);
-      } else if (userRole === "TRAINER") {
-        // Check if leave type is allowed for this trainer category
-        const leaveConfig = LEAVE_CONFIG[user.trainerCategory];
-        if (!leaveConfig.allowedLeaveTypes.includes(leaveType)) {
-          throw new ValidationError(
-            `${leaveType} leaves are not available for ${user.trainerCategory} trainers`,
-          );
-        }
-
-        // Check leave balance
-        const leaveTypeKey = leaveType.toLowerCase();
-        const availableBalance = user.leaveBalance?.[leaveTypeKey]?.available || 0;
-
-        if (availableBalance !== Infinity && availableBalance < numberOfDays) {
-          throw new ValidationError(
-            `Insufficient ${leaveType} leave balance. Available: ${availableBalance}, Requested: ${numberOfDays}`
-          );
-        }
-      }
-
-      // Check for overlapping leave - Support both schemas
-      const overlapping = await Leave.findOne({
-        $or: [
-          { applicantId: userId },
-          { trainerId: userId },
-          { "appliedBy.userId": userId }
-        ],
-        status: { $in: ["PENDING", "APPROVED"] },
-        $or: [
-          {
-            fromDate: { $lte: new Date(toDate) },
-            toDate: { $gte: new Date(fromDate) },
-          },
-        ],
-      });
-
-      if (overlapping) {
-        throw new ConflictError(
-          `You already have a ${overlapping.status.toLowerCase()} leave request for overlapping dates`,
+    // Role-specific validations
+    if (userRole === "HR") {
+      console.log(`✅ HR user ${user.username} applying for ${leaveType} leave (unlimited)`);
+    } else if (userRole === "TRAINER") {
+      // Check if leave type is allowed for this trainer category
+      const leaveConfig = LEAVE_CONFIG[user.trainerCategory];
+      if (!leaveConfig.allowedLeaveTypes.includes(leaveType)) {
+        throw new ValidationError(
+          `${leaveType} leaves are not available for ${user.trainerCategory} trainers`,
         );
       }
 
-      // Create leave request with FULL backward compatibility
-      const leave = new Leave({
-        // NEW SCHEMA fields
-        applicantId: userId,
-        applicantRole: userRole,
-        applicantName: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim(),
-        
-        // OLD SCHEMA fields for backward compatibility
-        trainerId: userId, // Always set for all users (backward compatibility)
-        appliedBy: {
-          userId: userId,
-          role: userRole,
-          name: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim()
-        },
-        
-        leaveType,
-        fromDate: new Date(fromDate),
-        toDate: new Date(toDate),
-        numberOfDays,
-        reason,
-        emergencyContact,
-        status: "PENDING",
-        appliedOn: new Date()
-      });
+      // Check leave balance
+      const leaveTypeKey = leaveType.toLowerCase();
+      const availableBalance = user.leaveBalance?.[leaveTypeKey]?.available || 0;
 
-      await leave.save();
-
-      // Add to user's leave history
-      user.leaveHistory = user.leaveHistory || [];
-      user.leaveHistory.push({
-        type: "APPLIED",
-        leaveType,
-        daysAffected: numberOfDays,
-        date: new Date(),
-        reason: `Leave application submitted`
-      });
-
-      await user.save();
-
-      console.log(`✅ Leave request created for ${userRole} ${userId}: ${leaveType} from ${fromDate} to ${toDate}`);
-      return leave;
-    } catch (error) {
-      console.error("Error applying for leave:", error);
-      throw error;
+      if (availableBalance !== Infinity && availableBalance < numberOfDays) {
+        throw new ValidationError(
+          `Insufficient ${leaveType} leave balance. Available: ${availableBalance}, Requested: ${numberOfDays}`
+        );
+      }
     }
+
+    // ✅ FIXED: Check for overlapping leave
+    const overlapping = await Leave.findOne({
+      $or: [
+        { applicantId: userId },
+        { trainerId: userId },
+        { "appliedBy.userId": userId }
+      ],
+      status: { $in: ["PENDING", "APPROVED"] },
+      // ✅ CORRECT: Direct date overlap condition
+      fromDate: { $lte: new Date(toDate) },
+      toDate: { $gte: new Date(fromDate) }
+    });
+
+    if (overlapping) {
+      throw new ConflictError(
+        `You already have a ${overlapping.status.toLowerCase()} leave request for overlapping dates`,
+      );
+    }
+
+    // Create leave request with FULL backward compatibility
+    const leave = new Leave({
+      // NEW SCHEMA fields
+      applicantId: userId,
+      applicantRole: userRole,
+      applicantName: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim(),
+      
+      // OLD SCHEMA fields for backward compatibility
+      trainerId: userId, // Always set for all users (backward compatibility)
+      appliedBy: {
+        userId: userId,
+        role: userRole,
+        name: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim()
+      },
+      
+      leaveType,
+      fromDate: new Date(fromDate),
+      toDate: new Date(toDate),
+      numberOfDays,
+      reason,
+      emergencyContact,
+      status: "PENDING",
+      appliedOn: new Date()
+    });
+
+    await leave.save();
+
+    // Add to user's leave history
+    user.leaveHistory = user.leaveHistory || [];
+    user.leaveHistory.push({
+      type: "APPLIED",
+      leaveType,
+      daysAffected: numberOfDays,
+      date: new Date(),
+      reason: `Leave application submitted`
+    });
+
+    await user.save();
+
+    console.log(`✅ Leave request created for ${userRole} ${userId}: ${leaveType} from ${fromDate} to ${toDate}`);
+    return leave;
+  } catch (error) {
+    console.error("Error applying for leave:", error);
+    throw error;
   }
+}
 
   // ============================================
   // ✅ APPROVE LEAVE (Backward compatible)
