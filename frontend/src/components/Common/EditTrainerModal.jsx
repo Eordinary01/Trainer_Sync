@@ -86,7 +86,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
       setLoading(true);
       setError(null);
 
-      // Prepare payload - only include fields that might have changed
+      // Prepare payload - only include fields that have values
       const payload = {
         email: formData.email,
         username: formData.username,
@@ -94,32 +94,34 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
           firstName: formData.firstName,
           lastName: formData.lastName,
           phone: formData.phone || undefined,
-        //   dateOfBirth: formData.dateOfBirth || undefined,
-          gender: formData.gender || undefined,
+          employeeId: formData.employeeId || undefined,
+          department: formData.department || undefined,
+          designation: formData.designation || undefined,
+          qualification: formData.qualification || undefined,
+          experience: formData.experience ? parseInt(formData.experience) : undefined,
           bio: formData.bio || undefined,
+          gender: formData.gender || undefined,
+          dateOfBirth: formData.dateOfBirth || undefined,
           address: formData.address || undefined,
           city: formData.city || undefined,
           state: formData.state || undefined,
           zipCode: formData.zipCode || undefined,
           country: formData.country || undefined,
-          employeeId: formData.employeeId || undefined,
-          department: formData.department || undefined,
-          designation: formData.designation || undefined,
-          joinDate: formData.joinDate || undefined,
-          qualification: formData.qualification || undefined,
-          experience: formData.experience ? parseInt(formData.experience) : undefined,
-        },
-        ...(formData.clientName && {
-          client: {
-            name: formData.clientName,
-            email: formData.clientEmail || undefined,
-            phone: formData.clientPhone || undefined,
-          },
-        }),
+          joiningDate: formData.joinDate || undefined,
+        }
       };
 
-      // Call update endpoint
-      const response = await api.put(`/users/${trainer._id}`, payload);
+      // Add client info if any client field has value
+      if (formData.clientName || formData.clientEmail || formData.clientPhone) {
+        payload.profile.client = {
+          name: formData.clientName || undefined,
+          email: formData.clientEmail || undefined,
+          phone: formData.clientPhone || undefined,
+        };
+      }
+
+      // ✅ FIXED: Use PUT request to update trainer profile
+      const response = await api.put(`/admin/${trainer._id}`, payload);
 
       if (response.data.success) {
         onSuccess(response.data.data);
@@ -142,17 +144,20 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
 
       let response;
       if (formData.status === "ACTIVE") {
-        // Deactivate trainer
+        // ✅ Deactivate trainer
         response = await api.patch(`/users/${trainer._id}/deactivate`);
         setFormData(prev => ({ ...prev, status: "INACTIVE" }));
       } else {
-        // Activate trainer
+        // ✅ Activate trainer
         response = await api.patch(`/users/${trainer._id}/activate`);
         setFormData(prev => ({ ...prev, status: "ACTIVE" }));
       }
 
       if (response.data.success) {
-        onSuccess(response.data.data);
+        // Update just the status in the parent component
+        onSuccess({ ...trainer, status: response.data.data.status });
+        // Show success message (optional)
+        setError(null);
       } else {
         setError(response.data.message || "Failed to update trainer status");
       }
@@ -167,7 +172,6 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
   const tabs = [
     { id: "basic", label: "Basic Info" },
     { id: "personal", label: "Personal" },
-    // { id: "address", label: "Address" },
     { id: "professional", label: "Professional" },
     { id: "client", label: "Client" },
   ];
@@ -187,6 +191,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
           {/* Status Toggle Button */}
           <div className="flex items-center gap-4 ml-4">
             <button
+              type="button"
               onClick={handleStatusToggle}
               disabled={loading}
               className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors whitespace-nowrap ${
@@ -195,10 +200,11 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   : "bg-red-100 text-red-800 hover:bg-red-200"
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              {formData.status === "ACTIVE" ? "Active" : "Inactive"}
+              {loading ? "Updating..." : formData.status === "ACTIVE" ? "Active" : "Inactive"}
             </button>
 
             <button
+              type="button"
               onClick={onClose}
               className="p-1 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
             >
@@ -212,6 +218,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
           {tabs.map(tab => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-3 font-medium text-sm whitespace-nowrap transition-colors ${
                 activeTab === tab.id
@@ -271,7 +278,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
 
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-700">
-                  <strong>Status:</strong> Use the button at the top to toggle between Active/Inactive
+                  <strong>Note:</strong> Use the button at the top to toggle between Active/Inactive status
                 </p>
               </div>
             </div>
@@ -328,7 +335,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   />
                 </div>
 
-                {/* <div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Date of Birth
                   </label>
@@ -339,10 +346,10 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                </div> */}
+                </div>
               </div>
 
-              {/* <div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Gender
                 </label>
@@ -357,9 +364,9 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   <option value="Female">Female</option>
                   <option value="Other">Other</option>
                 </select>
-              </div> */}
+              </div>
 
-              {/* <div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Bio
                 </label>
@@ -369,86 +376,11 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   onChange={handleInputChange}
                   rows="3"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  placeholder="Brief description about the trainer..."
                 />
-              </div> */}
+              </div>
             </div>
           )}
-
-          {/* Address Tab */}
-          {/* {activeTab === "address" && (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-gray-900 mb-4">Address Information</h3>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    State
-                  </label>
-                  <input
-                    type="text"
-                    name="state"
-                    value={formData.state}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Zip Code
-                  </label>
-                  <input
-                    type="text"
-                    name="zipCode"
-                    value={formData.zipCode}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Country
-                  </label>
-                  <input
-                    type="text"
-                    name="country"
-                    value={formData.country}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-          )} */}
 
           {/* Professional Tab */}
           {activeTab === "professional" && (
@@ -469,7 +401,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   />
                 </div>
 
-                {/* <div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Department
                   </label>
@@ -480,11 +412,11 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                </div> */}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* <div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Designation
                   </label>
@@ -495,7 +427,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                </div> */}
+                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -511,7 +443,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                 </div>
               </div>
 
-              {/* <div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Qualification
                 </label>
@@ -521,6 +453,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   value={formData.qualification}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="e.g., Bachelor's in Computer Science"
                 />
               </div>
 
@@ -533,9 +466,12 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   name="experience"
                   value={formData.experience}
                   onChange={handleInputChange}
+                  min="0"
+                  max="50"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="e.g., 5"
                 />
-              </div> */}
+              </div>
             </div>
           )}
 
@@ -554,6 +490,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   value={formData.clientName}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Company or individual name"
                 />
               </div>
 
@@ -567,6 +504,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   value={formData.clientEmail}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="client@example.com"
                 />
               </div>
 
@@ -580,6 +518,7 @@ export default function EditTrainerModal({ trainer, onClose, onSuccess }) {
                   value={formData.clientPhone}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="+1 (555) 000-0000"
                 />
               </div>
             </div>

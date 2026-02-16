@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom"; 
 import {
   Users,
@@ -28,29 +28,133 @@ export default function TrainersList() {
   const { user: currentUser, isAuthenticated } = useAuth();
   const navigate = useNavigate(); 
   const [trainers, setTrainers] = useState([]);
+  const [allTrainers, setAllTrainers] = useState([]); // Store all trainers for search
   const [clockedInList, setClockedInList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [editingTrainer, setEditingTrainer] = useState(null);
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   
-  // ✅ PAGINATION STATE - Matches backend structure
+  // Pagination
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 10, // Your backend default limit
+    limit: 10,
     total: 0,
     pages: 1
   });
 
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fetch paginated trainers
   useEffect(() => {
     if (
       isAuthenticated &&
       (currentUser?.role === "ADMIN" || currentUser?.role === "HR")
     ) {
       fetchTrainersData();
+      fetchAllTrainers(); // Fetch all trainers once for search
     }
-  }, [isAuthenticated, currentUser, pagination.page, pagination.limit, searchTerm, statusFilter]);
+  }, [isAuthenticated, currentUser, pagination.page, pagination.limit, statusFilter]);
+
+  // Fetch all trainers (for search)
+  const fetchAllTrainers = async () => {
+    try {
+      const response = await api.get("/users?limit=1000"); // Get all trainers
+      const responseData = response.data.data;
+      const trainersData = responseData?.trainers || [];
+      setAllTrainers(trainersData.filter((user) => user.role === "TRAINER"));
+    } catch (error) {
+      console.error("Error fetching all trainers:", error);
+    }
+  };
+
+  // Search when debounced term changes
+  useEffect(() => {
+    if (debouncedSearchTerm.trim() !== "") {
+      performSearch();
+    } else {
+      setIsSearching(false);
+      setSearchResults([]);
+    }
+  }, [debouncedSearchTerm, statusFilter]);
+
+  const performSearch = async () => {
+    setIsSearching(true);
+    setSearchLoading(true);
+    
+    // Filter all trainers based on search term and status
+    const searchLower = debouncedSearchTerm.toLowerCase();
+    const filtered = allTrainers.filter((trainer) => {
+      // Apply status filter first
+      if (statusFilter === "ACTIVE" && trainer.status !== "ACTIVE") return false;
+      if (statusFilter === "INACTIVE" && trainer.status !== "INACTIVE") return false;
+      
+      // Then apply search
+      const fullName = `${trainer.profile?.firstName || ''} ${trainer.profile?.lastName || ''}`.toLowerCase();
+      const email = (trainer.email || '').toLowerCase();
+      const username = (trainer.username || '').toLowerCase();
+      const employeeId = (trainer.profile?.employeeId || '').toLowerCase();
+      
+      return (
+        fullName.includes(searchLower) ||
+        email.includes(searchLower) ||
+        username.includes(searchLower) ||
+        employeeId.includes(searchLower)
+      );
+    });
+
+    // Get clocked-in status for search results
+    try {
+      const clockedInResponse = await api.get("/attendance/today/clocked-in-list");
+      const clockedInUsers = clockedInResponse.data.data || [];
+
+      const resultsWithStatus = filtered.map((trainer) => {
+        const todayAttendance = clockedInUsers.find((clockedIn) => {
+          return (
+            clockedIn.userId === trainer._id ||
+            clockedIn.user?._id === trainer._id ||
+            clockedIn.userId?._id === trainer._id ||
+            clockedIn.id === trainer._id
+          );
+        });
+
+        return {
+          ...trainer,
+          todayAttendance: todayAttendance || null,
+          isClockedIn: !!todayAttendance && !todayAttendance.clockOutTime,
+        };
+      });
+
+      setSearchResults(resultsWithStatus);
+    } catch (error) {
+      console.error("Error fetching clocked-in status for search:", error);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearch = (e) => {
+    setSearchTerm(e.target.value);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setDebouncedSearchTerm("");
+    setIsSearching(false);
+    setSearchResults([]);
+  };
 
   const handleViewTrainerDetails = (trainerId) => {
     navigate(`/admin/trainers/${trainerId}`);
@@ -66,41 +170,30 @@ export default function TrainersList() {
 
   const handleTrainerUpdated = (updatedTrainer) => {
     setTrainers(trainers.map(t => t._id === updatedTrainer._id ? { ...t, ...updatedTrainer } : t));
-    console.log("✅ Trainer profile updated successfully");
+    // Also update in allTrainers
+    setAllTrainers(allTrainers.map(t => t._id === updatedTrainer._id ? { ...t, ...updatedTrainer } : t));
+    // Update search results if searching
+    if (isSearching) {
+      setSearchResults(searchResults.map(t => t._id === updatedTrainer._id ? { ...t, ...updatedTrainer } : t));
+    }
   };
 
-  // ✅ FETCH WITH EXACT BACKEND PARAMETERS
   const fetchTrainersData = async () => {
     try {
       setLoading(true);
 
-      console.log("🔄 Fetching trainers data...");
-
-      // Build query params exactly as your backend expects
       const params = new URLSearchParams({
         page: pagination.page,
         limit: pagination.limit,
       });
 
-      // Add search param if exists (backend should handle this)
-      if (searchTerm) {
-        params.append('search', searchTerm);
-      }
-
-      // Add status filter if not ALL (backend should handle ACTIVE/INACTIVE)
       if (statusFilter === 'ACTIVE' || statusFilter === 'INACTIVE') {
         params.append('status', statusFilter);
       }
 
-      // Fetch trainers with pagination
       const usersResponse = await api.get(`/users?${params.toString()}`);
-      
-      // Fetch clocked-in list separately
       const clockedInResponse = await api.get("/attendance/today/clocked-in-list");
 
-      console.log("📊 API Response:", usersResponse.data);
-
-      // ✅ EXACT STRUCTURE FROM YOUR BACKEND
       const responseData = usersResponse.data.data;
       const trainersData = responseData?.trainers || [];
       const paginationData = responseData?.pagination || {
@@ -112,7 +205,6 @@ export default function TrainersList() {
 
       const clockedInUsers = clockedInResponse.data.data || [];
 
-      // ✅ Update pagination state EXACTLY as backend returns
       setPagination({
         page: paginationData.page || 1,
         limit: paginationData.limit || 10,
@@ -120,7 +212,6 @@ export default function TrainersList() {
         pages: paginationData.pages || 1
       });
 
-      // Map trainers with today's attendance
       const trainersWithStatus = trainersData
         .filter((user) => user.role === "TRAINER")
         .map((trainer) => {
@@ -140,9 +231,6 @@ export default function TrainersList() {
           };
         });
 
-      console.log("✅ Trainers loaded:", trainersWithStatus.length);
-      console.log("📊 Pagination:", paginationData);
-
       setTrainers(trainersWithStatus);
       setClockedInList(clockedInUsers);
       
@@ -157,25 +245,14 @@ export default function TrainersList() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchTrainersData();
+    await fetchAllTrainers();
   };
 
-  // ✅ SEARCH HANDLER - Debounced to prevent too many API calls
-  const handleSearch = (e) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    // Reset to page 1 when searching
-    setPagination(prev => ({ ...prev, page: 1 }));
-  };
-
-  // ✅ STATUS FILTER HANDLER
   const handleStatusFilter = (e) => {
-    const value = e.target.value;
-    setStatusFilter(value);
-    // Reset to page 1 when filtering
+    setStatusFilter(e.target.value);
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
-  // ✅ PAGINATION HANDLERS
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= pagination.pages) {
       setPagination(prev => ({ ...prev, page: newPage }));
@@ -184,54 +261,26 @@ export default function TrainersList() {
   };
 
   const handleLimitChange = (e) => {
-    const newLimit = parseInt(e.target.value);
     setPagination(prev => ({ 
       ...prev, 
-      limit: newLimit,
-      page: 1 // Reset to first page when changing items per page
+      limit: parseInt(e.target.value),
+      page: 1
     }));
   };
 
-  // ✅ CLOCKED-IN FILTER - Only filter for clocked-in status on frontend
-  const filteredTrainers = trainers.filter((trainer) => {
-    if (statusFilter === "CLOCKED_IN") return trainer.isClockedIn === true;
-    if (statusFilter === "NOT_CLOCKED_IN") return trainer.isClockedIn === false;
-    return true; // ACTIVE/INACTIVE filters are handled by backend
-  });
-
-  // ... (keep all your existing helper functions: getStatusBadge, getAttendanceBadge, getWorkingHours)
-
   const getStatusBadge = (status) => {
     const statusConfig = {
-      ACTIVE: {
-        color: "bg-green-100 text-green-800",
-        label: "Active",
-        icon: UserCheck,
-      },
-      INACTIVE: {
-        color: "bg-gray-100 text-gray-800",
-        label: "Inactive",
-        icon: UserX,
-      },
-      SUSPENDED: {
-        color: "bg-red-100 text-red-800",
-        label: "Suspended",
-        icon: UserX,
-      },
-      ON_LEAVE: {
-        color: "bg-yellow-100 text-yellow-800",
-        label: "On Leave",
-        icon: Calendar,
-      },
+      ACTIVE: { color: "bg-green-100 text-green-800", label: "Active", icon: UserCheck },
+      INACTIVE: { color: "bg-gray-100 text-gray-800", label: "Inactive", icon: UserX },
+      SUSPENDED: { color: "bg-red-100 text-red-800", label: "Suspended", icon: UserX },
+      ON_LEAVE: { color: "bg-yellow-100 text-yellow-800", label: "On Leave", icon: Calendar },
     };
 
     const config = statusConfig[status] || statusConfig.INACTIVE;
     const IconComponent = config.icon;
 
     return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}
-      >
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
         <IconComponent className="w-3 h-3 mr-1" />
         {config.label}
       </span>
@@ -281,7 +330,11 @@ export default function TrainersList() {
     return `${hours}h ${minutes}m`;
   };
 
-  // Show unauthorized message for non-admin/hr users
+  // Determine what to display
+  const displayTrainers = isSearching ? searchResults : trainers;
+  const displayLoading = isSearching ? searchLoading : loading;
+
+  // Authorization check
   if (
     isAuthenticated &&
     !(currentUser?.role === "ADMIN" || currentUser?.role === "HR")
@@ -290,9 +343,7 @@ export default function TrainersList() {
       <div className="max-w-7xl mx-auto p-6">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
           <UserX className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-yellow-800 mb-2">
-            Access Denied
-          </h2>
+          <h2 className="text-2xl font-bold text-yellow-800 mb-2">Access Denied</h2>
           <p className="text-yellow-700">
             You need Admin or HR privileges to access the trainers list.
           </p>
@@ -301,7 +352,7 @@ export default function TrainersList() {
     );
   }
 
-  if (loading && !refreshing) {
+  if (displayLoading && !refreshing) {
     return (
       <div className="max-w-7xl mx-auto p-6">
         <div className="animate-pulse">
@@ -353,6 +404,14 @@ export default function TrainersList() {
                 onChange={handleSearch}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+              {searchTerm && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  ×
+                </button>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -368,7 +427,6 @@ export default function TrainersList() {
               <option value="NOT_CLOCKED_IN">Not Clocked In</option>
             </select>
             
-            {/* ✅ Items per page selector - Your backend supports this */}
             <select
               value={pagination.limit}
               onChange={handleLimitChange}
@@ -385,23 +443,29 @@ export default function TrainersList() {
               disabled={refreshing}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              <RefreshCw
-                className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
-              />
+              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
               {refreshing ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         </div>
       </div>
 
+      {/* Results count */}
+      <div className="mb-4 text-sm text-gray-600">
+        {isSearching ? (
+          <>Found <span className="font-semibold text-blue-600">{searchResults.length}</span> matching trainers for "{searchTerm}"</>
+        ) : (
+          <>Showing {trainers.length} of {pagination.total} trainers</>
+        )}
+      </div>
+
       {/* Trainers Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTrainers.map((trainer) => (
+        {displayTrainers.map((trainer) => (
           <div
             key={trainer._id}
             className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
           >
-            {/* ... (keep all your existing trainer card JSX) ... */}
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center space-x-3">
@@ -421,7 +485,6 @@ export default function TrainersList() {
                   )}
                 </div>
               </div>
-              {/* Action Buttons */}
               <div className="flex gap-2">
                 <button
                   onClick={() => handleViewTrainerDetails(trainer._id)}
@@ -481,16 +544,11 @@ export default function TrainersList() {
                   </div>
                   <div>
                     <div className="text-gray-500">
-                      {trainer.todayAttendance.clockOutTime
-                        ? "Clock Out"
-                        : "Working Hours"}
+                      {trainer.todayAttendance.clockOutTime ? "Clock Out" : "Working Hours"}
                     </div>
                     <div className="font-medium">
                       {trainer.todayAttendance.clockOutTime
-                        ? formatDate(
-                            trainer.todayAttendance.clockOutTime,
-                            "HH:MM"
-                          )
+                        ? formatDate(trainer.todayAttendance.clockOutTime, "HH:MM")
                         : getWorkingHours(trainer.todayAttendance)}
                     </div>
                   </div>
@@ -498,9 +556,7 @@ export default function TrainersList() {
                 {trainer.todayAttendance.location?.address && (
                   <div className="text-xs text-gray-500 mt-2 flex items-center">
                     <MapPin className="w-3 h-3 mr-1" />
-                    <span className="truncate">
-                      {trainer.todayAttendance.location.address}
-                    </span>
+                    <span className="truncate">{trainer.todayAttendance.location.address}</span>
                   </div>
                 )}
               </div>
@@ -509,42 +565,44 @@ export default function TrainersList() {
             {/* Additional Info */}
             <div className="flex justify-between items-center pt-3 border-t border-gray-100 text-xs text-gray-500">
               <div>
-                Joined:{" "}
-                {trainer.createdAt
-                  ? formatDate(trainer.createdAt, "DD/MM/YYYY")
-                  : "N/A"}
+                Joined: {trainer.createdAt ? formatDate(trainer.createdAt, "DD/MM/YYYY") : "N/A"}
               </div>
-              <div
-                className={`px-2 py-1 rounded ${
-                  trainer.status === "ACTIVE"
-                    ? "bg-green-100 text-green-800"
-                    : "bg-gray-100 text-gray-800"
-                }`}
-              >
+              <div className={`px-2 py-1 rounded ${
+                trainer.status === "ACTIVE"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-gray-100 text-gray-800"
+              }`}>
                 {trainer.status === "ACTIVE" ? "Active" : "Inactive"}
               </div>
             </div>
+
+            {/* Search result indicator */}
+            {isSearching && (
+              <div className="mt-2 text-xs text-blue-600 text-right">
+                Found in search
+              </div>
+            )}
           </div>
         ))}
       </div>
 
       {/* No Results */}
-      {filteredTrainers.length === 0 && (
+      {displayTrainers.length === 0 && (
         <div className="text-center py-12">
           <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            No trainers found
-          </h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No trainers found</h3>
           <p className="text-gray-500">
-            {searchTerm || statusFilter !== "ALL"
-              ? "Try adjusting your search or filters"
+            {searchTerm
+              ? `No results found for "${searchTerm}"`
+              : statusFilter !== "ALL"
+              ? "No trainers match the selected filter"
               : "No trainers are currently registered in the system"}
           </p>
         </div>
       )}
 
-      {/* ✅ PAGINATION CONTROLS - Matches your backend structure */}
-      {pagination.pages > 1 && (
+      {/* Pagination Controls - Only show when NOT searching */}
+      {!isSearching && pagination.pages > 1 && (
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-sm text-gray-700">
             Showing <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> to{' '}
