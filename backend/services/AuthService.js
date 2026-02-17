@@ -1,49 +1,62 @@
-import User from '../models/User.model.js';
-import { JWTHelper } from '../utils/jwt.js';
-import { Validators } from '../utils/validators.js';
-import { Encryption } from '../utils/encryption.js';
+import User from "../models/User.model.js";
+import { JWTHelper } from "../utils/jwt.js";
+import { Validators } from "../utils/validators.js";
+import { Encryption } from "../utils/encryption.js";
 import {
   AuthenticationError,
   ConflictError,
   NotFoundError,
   ValidationError,
-} from '../utils/errorHandler.js';
-import { TRAINER_CATEGORY, LEAVE_CONFIG } from '../config/constant.js';
-import { LeaveService } from './LeaveService.js'; // Import LeaveService
+} from "../utils/errorHandler.js";
+import { TRAINER_CATEGORY, LEAVE_CONFIG } from "../config/constant.js";
+import { LeaveService } from "./LeaveService.js"; // Import LeaveService
 
 export class AuthService {
   constructor() {
     this.leaveService = new LeaveService(); // Initialize LeaveService
 
-
     this.resetAttempts = new Map();
   }
 
-  async register(username, email, password, role = 'TRAINER', profile = {}, trainerCategory = 'PERMANENT') {
-    console.log('🚀 AuthService.register called with:', { username, email, role, trainerCategory });
-    
+  async register(
+    username,
+    email,
+    password,
+    role = "TRAINER",
+    profile = {},
+    trainerCategory = "PERMANENT",
+  ) {
+    console.log("🚀 AuthService.register called with:", {
+      username,
+      email,
+      role,
+      trainerCategory,
+    });
+
     // ✅ Validate email
     if (!Validators.validateEmail(email)) {
-      throw new ValidationError('Invalid email format');
+      throw new ValidationError("Invalid email format");
     }
 
     // ✅ Validate password
     const passwordValidation = Validators.validatePassword(password);
     if (!passwordValidation.isValid) {
-      throw new ValidationError('Password does not meet requirements');
+      throw new ValidationError("Password does not meet requirements");
     }
 
     // ✅ Validate trainer category if registering as trainer
-    if (role === 'TRAINER') {
+    if (role === "TRAINER") {
       if (!Object.values(TRAINER_CATEGORY).includes(trainerCategory)) {
-        throw new ValidationError(`Invalid trainer category. Must be ${Object.values(TRAINER_CATEGORY).join(' or ')}`);
+        throw new ValidationError(
+          `Invalid trainer category. Must be ${Object.values(TRAINER_CATEGORY).join(" or ")}`,
+        );
       }
     }
 
     // ✅ Check for existing user
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
-      throw new ConflictError('Email or username already exists');
+      throw new ConflictError("Email or username already exists");
     }
 
     // ✅ Create user with minimal initial leave balance
@@ -52,7 +65,7 @@ export class AuthService {
       email,
       password,
       role,
-      trainerCategory: role === 'TRAINER' ? trainerCategory : undefined,
+      trainerCategory: role === "TRAINER" ? trainerCategory : undefined,
       profile,
       // ✅ Leave balance will be initialized separately after user creation
       leaveBalance: {
@@ -70,12 +83,20 @@ export class AuthService {
     console.log(`✅ User created successfully: ${user._id}`);
 
     // ✅ Initialize proper leave balance based on category (for trainers only)
-    if (role === 'TRAINER') {
+    if (role === "TRAINER") {
       try {
-        await this.leaveService.initializeLeaveBalance(user._id, trainerCategory);
-        console.log(`✅ Leave balance initialized for trainer: ${user._id} (${trainerCategory})`);
+        await this.leaveService.initializeLeaveBalance(
+          user._id,
+          trainerCategory,
+        );
+        console.log(
+          `✅ Leave balance initialized for trainer: ${user._id} (${trainerCategory})`,
+        );
       } catch (leaveError) {
-        console.error(`❌ Failed to initialize leave balance for ${user._id}:`, leaveError);
+        console.error(
+          `❌ Failed to initialize leave balance for ${user._id}:`,
+          leaveError,
+        );
         // Don't fail registration if leave initialization fails
       }
     }
@@ -84,76 +105,86 @@ export class AuthService {
   }
 
   async login(username, password) {
-    console.log('🔐 Login attempt for:', username);
-    
+    console.log("🔐 Login attempt for:", username);
+
     const user = await User.findOne({
       $or: [{ username }, { email: username }],
-    }).select('+password +isFirstLogin');
+    }).select("+password +isFirstLogin");
 
-    console.log('👤 User found:', user ? 'Yes' : 'No');
-    console.log('📧 User email:', user?.email);
-    console.log('👤 User username:', user?.username);
-    console.log('🏷️ User role:', user?.role);
-    console.log('📊 User category:', user?.trainerCategory);
+    console.log("👤 User found:", user ? "Yes" : "No");
+    console.log("📧 User email:", user?.email);
+    console.log("👤 User username:", user?.username);
+    console.log("🏷️ User role:", user?.role);
+    console.log("📊 User category:", user?.trainerCategory);
 
     if (!user) {
-      console.log('❌ User not found');
-      throw new AuthenticationError('Invalid credentials');
+      console.log("❌ User not found");
+      throw new AuthenticationError("Invalid credentials");
     }
 
-    console.log('🔒 Account locked:', user.isLocked());
+    console.log("🔒 Account locked:", user.isLocked());
     if (user.isLocked()) {
-      throw new AuthenticationError('Account is locked. Please contact administrator.');
+      throw new AuthenticationError(
+        "Account is locked. Please contact administrator.",
+      );
     }
 
-    console.log('🔑 Comparing password...');
+    console.log("🔑 Comparing password...");
     const isPasswordValid = await user.comparePassword(password);
-    console.log('✅ Password valid:', isPasswordValid);
+    console.log("✅ Password valid:", isPasswordValid);
 
     if (!isPasswordValid) {
-      console.log('❌ Password invalid, incrementing login attempts');
+      console.log("❌ Password invalid, incrementing login attempts");
       await user.incLoginAttempts();
-      
+
       // Check if account should be locked
       if (user.loginAttempts >= 5) {
         user.lockAccount();
         await user.save();
-        throw new AuthenticationError('Account locked due to too many failed attempts. Please contact administrator.');
+        throw new AuthenticationError(
+          "Account locked due to too many failed attempts. Please contact administrator.",
+        );
       }
-      
+
       await user.save();
-      throw new AuthenticationError('Invalid credentials');
+      throw new AuthenticationError("Invalid credentials");
     }
 
-    console.log('✅ Login successful, resetting login attempts');
+    console.log("✅ Login successful, resetting login attempts");
     await user.resetLoginAttempts();
-    
+
     // ✅ Check and auto-increment leaves for PERMANENT trainers
-    if (user.role === 'TRAINER' && user.trainerCategory === 'PERMANENT') {
+    if (user.role === "TRAINER" && user.trainerCategory === "PERMANENT") {
       try {
         // Check if 30 days have passed since last increment
         const now = new Date();
-        const lastIncrement = user.leaveBalance?.lastIncrementDate || user.createdAt;
+        const lastIncrement =
+          user.leaveBalance?.lastIncrementDate || user.createdAt;
         const daysSinceLastIncrement = Math.floor(
-          (now - new Date(lastIncrement)) / (1000 * 60 * 60 * 24)
+          (now - new Date(lastIncrement)) / (1000 * 60 * 60 * 24),
         );
-        
+
         if (daysSinceLastIncrement >= 30) {
-          console.log(`🔄 Auto-incrementing leaves for trainer ${user._id} (${daysSinceLastIncrement} days since last increment)`);
+          console.log(
+            `🔄 Auto-incrementing leaves for trainer ${user._id} (${daysSinceLastIncrement} days since last increment)`,
+          );
           await this.leaveService.incrementMonthlyLeaves(user._id);
         }
       } catch (incrementError) {
-        console.error(`❌ Failed to auto-increment leaves for ${user._id}:`, incrementError);
+        console.error(
+          `❌ Failed to auto-increment leaves for ${user._id}:`,
+          incrementError,
+        );
         // Don't fail login if auto-increment fails
       }
     }
 
     // ✅ Include isFirstLogin and trainerCategory in Token
     const token = JWTHelper.generateToken(
-      user._id, 
-      user.role, 
+      user._id,
+      user.role,
       user.isFirstLogin,
-      user.trainerCategory // ✅ Include trainer category in token
+      user.trainerCategory, // ✅ Include trainer category in token
     );
     const refreshToken = JWTHelper.generateRefreshToken(user._id);
 
@@ -163,7 +194,7 @@ export class AuthService {
       refreshToken,
       isFirstLogin: user.isFirstLogin,
       trainerCategory: user.trainerCategory,
-      expiresIn: '24h',
+      expiresIn: "24h",
     };
   }
 
@@ -172,40 +203,42 @@ export class AuthService {
     const user = await User.findById(decoded.userId);
 
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
     // ✅ Include isFirstLogin and trainerCategory in new token
     const newToken = JWTHelper.generateToken(
-      user._id, 
-      user.role, 
+      user._id,
+      user.role,
       user.isFirstLogin,
-      user.trainerCategory
+      user.trainerCategory,
     );
-    
-    return { 
-      token: newToken, 
-      expiresIn: '24h',
+
+    return {
+      token: newToken,
+      expiresIn: "24h",
       isFirstLogin: user.isFirstLogin,
-      trainerCategory: user.trainerCategory
+      trainerCategory: user.trainerCategory,
     };
   }
 
   async requestPasswordReset(email) {
     // ✅ Rate limiting by IP should be done in middleware
     // This method only handles the business logic
-    
+
     const user = await User.findOne({ email });
-    
+
     // ✅ GENERIC RESPONSE - Don't reveal if user exists or not
     // Always return success, even if user doesn't exist
     if (!user) {
-      console.log(`🔐 Password reset requested for non-existent email: ${email}`);
+      console.log(
+        `🔐 Password reset requested for non-existent email: ${email}`,
+      );
       return {
         success: true,
         // Return dummy data for consistent response structure
         token: null,
-        user: null
+        user: null,
       };
     }
 
@@ -216,14 +249,14 @@ export class AuthService {
       return {
         success: true,
         token: null,
-        user: null
+        user: null,
       };
     }
 
     // ✅ Generate reset token (6-digit numeric for better UX)
     const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedToken = Encryption.hashToken(resetToken);
-    
+
     // ✅ Store hashed token and expiry (15 minutes for better security)
     user.passwordResetToken = hashedToken;
     user.passwordResetExpire = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
@@ -238,43 +271,46 @@ export class AuthService {
         id: user._id,
         email: user.email,
         username: user.username,
-        name: user.profile?.firstName 
-          ? `${user.profile.firstName} ${user.profile.lastName || ''}`.trim() 
-          : user.username
-      }
+        name: user.profile?.firstName
+          ? `${user.profile.firstName} ${user.profile.lastName || ""}`.trim()
+          : user.username,
+      },
     };
   }
 
-
-   async resetPassword(token, newPassword) {
+  async resetPassword(token, newPassword) {
     // ✅ Validate password strength
     const passwordValidation = Validators.validatePassword(newPassword);
     if (!passwordValidation.isValid) {
-      throw new ValidationError('Password does not meet security requirements');
+      throw new ValidationError("Password does not meet security requirements");
     }
 
     // ✅ Hash the provided token to compare with stored hash
     const hashedToken = Encryption.hashToken(token);
-    
+
     const user = await User.findOne({
       passwordResetToken: hashedToken,
       passwordResetExpire: { $gt: Date.now() },
-    }).select('+password +isFirstLogin');
+    }).select("+password +isFirstLogin");
 
     if (!user) {
       // ✅ Generic error message - don't specify if token is invalid or expired
-      throw new AuthenticationError('Invalid or expired reset token');
+      throw new AuthenticationError("Invalid or expired reset token");
     }
 
     // ✅ Check if account is locked
     if (user.isLocked()) {
-      throw new AuthenticationError('Account is locked. Please contact administrator.');
+      throw new AuthenticationError(
+        "Account is locked. Please contact administrator.",
+      );
     }
 
     // ✅ Check if new password is same as old password
     const isSamePassword = await user.comparePassword(newPassword);
     if (isSamePassword) {
-      throw new ValidationError('New password cannot be the same as old password');
+      throw new ValidationError(
+        "New password cannot be the same as old password",
+      );
     }
 
     // ✅ Update password and clear reset fields
@@ -283,121 +319,136 @@ export class AuthService {
     user.passwordResetExpire = undefined;
     user.isFirstLogin = false;
     user.passwordChangedAt = new Date();
-    
+
     // ✅ Reset login attempts on successful password reset
     await user.resetLoginAttempts();
-    
+
     await user.save();
 
     console.log(`✅ Password reset successful for user: ${user._id}`);
 
     return {
       success: true,
-      message: 'Password reset successful',
+      message: "Password reset successful",
       user: {
         id: user._id,
         email: user.email,
-        username: user.username
-      }
+        username: user.username,
+      },
     };
   }
 
   async changePassword(userId, oldPassword, newPassword) {
-    console.log('🔐 CHANGE PASSWORD DEBUG START ==========');
-    console.log('📝 Input - User ID:', userId);
-    console.log('📝 Input - Old Password:', oldPassword ? '***' : 'NOT PROVIDED');
-    console.log('📝 Input - New Password:', newPassword ? '***' : 'NOT PROVIDED');
+    console.log("🔐 CHANGE PASSWORD DEBUG START ==========");
+    console.log("📝 Input - User ID:", userId);
+    console.log(
+      "📝 Input - Old Password:",
+      oldPassword ? "***" : "NOT PROVIDED",
+    );
+    console.log(
+      "📝 Input - New Password:",
+      newPassword ? "***" : "NOT PROVIDED",
+    );
 
     // ✅ Add better error handling for user lookup
     let user;
     try {
-      user = await User.findById(userId).select('+password +isFirstLogin');
-      console.log('👤 User found:', user ? `Yes (${user.email})` : 'No');
-      console.log('🔒 Account locked:', user?.isLocked ? user.isLocked() : 'N/A');
+      user = await User.findById(userId).select("+password +isFirstLogin");
+      console.log("👤 User found:", user ? `Yes (${user.email})` : "No");
+      console.log(
+        "🔒 Account locked:",
+        user?.isLocked ? user.isLocked() : "N/A",
+      );
     } catch (error) {
-      console.error('❌ Error finding user:', error);
-      throw new NotFoundError('Error finding user');
+      console.error("❌ Error finding user:", error);
+      throw new NotFoundError("Error finding user");
     }
-    
+
     if (!user) {
-      console.log('❌ User not found with ID:', userId);
-      throw new NotFoundError('User not found');
+      console.log("❌ User not found with ID:", userId);
+      throw new NotFoundError("User not found");
     }
 
     // ✅ Check if account is locked
     if (user.isLocked()) {
-      throw new AuthenticationError('Account is locked. Please contact administrator.');
+      throw new AuthenticationError(
+        "Account is locked. Please contact administrator.",
+      );
     }
 
-    console.log('🔑 Verifying old password...');
+    console.log("🔑 Verifying old password...");
     const isPasswordValid = await user.comparePassword(oldPassword);
-    console.log('✅ Old password valid:', isPasswordValid);
-    
+    console.log("✅ Old password valid:", isPasswordValid);
+
     if (!isPasswordValid) {
       // Increment login attempts for failed password change
       await user.incLoginAttempts();
       await user.save();
-      
+
       if (user.loginAttempts >= 5) {
         user.lockAccount();
         await user.save();
-        throw new AuthenticationError('Account locked due to too many failed attempts.');
+        throw new AuthenticationError(
+          "Account locked due to too many failed attempts.",
+        );
       }
-      
-      throw new AuthenticationError('Current password is incorrect');
+
+      throw new AuthenticationError("Current password is incorrect");
     }
 
-    console.log('📋 Validating new password...');
+    console.log("📋 Validating new password...");
     const passwordValidation = Validators.validatePassword(newPassword);
-    console.log('✅ New password valid:', passwordValidation.isValid);
-    
+    console.log("✅ New password valid:", passwordValidation.isValid);
+
     if (!passwordValidation.isValid) {
-      throw new ValidationError('New password does not meet requirements');
+      throw new ValidationError("New password does not meet requirements");
     }
 
     // ✅ Check if new password is same as old password
     const isSamePassword = await user.comparePassword(newPassword);
     if (isSamePassword) {
-      throw new ValidationError('New password cannot be the same as old password');
+      throw new ValidationError(
+        "New password cannot be the same as old password",
+      );
     }
 
-    console.log('💾 Saving new password...');
-    console.log('📝 Before - isFirstLogin:', user.isFirstLogin);
-    
+    console.log("💾 Saving new password...");
+    console.log("📝 Before - isFirstLogin:", user.isFirstLogin);
+
     user.password = newPassword;
     user.isFirstLogin = false; // ✅ Set to false after password change
     await user.resetLoginAttempts(); // ✅ Reset login attempts on successful password change
-    
-    console.log('📝 After - isFirstLogin:', user.isFirstLogin);
-    
+
+    console.log("📝 After - isFirstLogin:", user.isFirstLogin);
+
     await user.save();
-    console.log('✅ User saved successfully');
+    console.log("✅ User saved successfully");
 
-    console.log('🔐 CHANGE PASSWORD DEBUG END ==========');
+    console.log("🔐 CHANGE PASSWORD DEBUG END ==========");
 
-    return { 
-      message: 'Password changed successfully',
-      isFirstLogin: false // ✅ Confirm that isFirstLogin is now false
+    return {
+      message: "Password changed successfully",
+      isFirstLogin: false, // ✅ Confirm that isFirstLogin is now false
     };
   }
 
   async verifyToken(token) {
     const decoded = JWTHelper.verifyToken(token);
-    
+
     // ✅ Check if user still exists and is active
     const user = await User.findById(decoded.userId);
     if (!user) {
-      throw new AuthenticationError('User not found');
+      throw new AuthenticationError("User not found");
     }
-    
-    if (user.status !== 'ACTIVE') {
-      throw new AuthenticationError('Account is not active');
+
+    if (user.status !== "ACTIVE") {
+      throw new AuthenticationError("Account is not active");
     }
-    
+
     if (user.isLocked()) {
-      throw new AuthenticationError('Account is locked');
+      throw new AuthenticationError("Account is locked");
     }
-    
+
     return {
       ...decoded,
       user: {
@@ -406,8 +457,8 @@ export class AuthService {
         isFirstLogin: user.isFirstLogin,
         trainerCategory: user.trainerCategory,
         email: user.email,
-        username: user.username
-      }
+        username: user.username,
+      },
     };
   }
 
@@ -415,34 +466,36 @@ export class AuthService {
   async unlockAccount(userId) {
     const user = await User.findById(userId);
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
-    
+
     user.unlockAccount();
     await user.save();
-    
-    return { 
-      message: 'Account unlocked successfully',
+
+    return {
+      message: "Account unlocked successfully",
       user: {
         id: user._id,
         email: user.email,
-        username: user.username
-      }
+        username: user.username,
+      },
     };
   }
 
   // ✅ NEW: Get login attempts info
   async getLoginAttempts(userId) {
-    const user = await User.findById(userId).select('+loginAttempts +lockUntil');
+    const user = await User.findById(userId).select(
+      "+loginAttempts +lockUntil",
+    );
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
-    
+
     return {
       loginAttempts: user.loginAttempts || 0,
       isLocked: user.isLocked(),
       lockUntil: user.lockUntil,
-      remainingAttempts: Math.max(0, 5 - (user.loginAttempts || 0))
+      remainingAttempts: Math.max(0, 5 - (user.loginAttempts || 0)),
     };
   }
 }

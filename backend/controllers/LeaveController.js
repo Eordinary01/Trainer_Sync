@@ -20,18 +20,21 @@ export class LeaveController {
   // ✅ HELPER: Get applicant info with backward compatibility
   getApplicantInfo(leave) {
     // Try new schema first
-    const applicantId = leave.applicantId || leave.trainerId || leave.appliedBy?.userId || null;
-    const applicantRole = leave.applicantRole || leave.appliedBy?.role || "TRAINER";
-    const applicantName = leave.applicantName || 
-                         (leave.appliedBy?.name) || 
-                         this.getUserFullName(leave.applicantId || leave.trainerId) ||
-                         "User";
-    
+    const applicantId =
+      leave.applicantId || leave.trainerId || leave.appliedBy?.userId || null;
+    const applicantRole =
+      leave.applicantRole || leave.appliedBy?.role || "TRAINER";
+    const applicantName =
+      leave.applicantName ||
+      leave.appliedBy?.name ||
+      this.getUserFullName(leave.applicantId || leave.trainerId) ||
+      "User";
+
     return {
       id: applicantId,
       role: applicantRole,
       name: applicantName,
-      email: leave.applicantId?.email || leave.trainerId?.email || null
+      email: leave.applicantId?.email || leave.trainerId?.email || null,
     };
   }
 
@@ -39,7 +42,7 @@ export class LeaveController {
   getUserFullName(user) {
     if (!user) return "User";
 
-    if (typeof user === 'object') {
+    if (typeof user === "object") {
       if (user.profile?.firstName && user.profile?.lastName) {
         return `${user.profile.firstName} ${user.profile.lastName}`;
       }
@@ -53,7 +56,7 @@ export class LeaveController {
         return user.email.split("@")[0];
       }
     }
-    
+
     return "User";
   }
 
@@ -150,16 +153,18 @@ export class LeaveController {
       await leave.populate([
         {
           path: "applicantId",
-          select: "username profile.firstName profile.lastName email profile.employeeId role",
+          select:
+            "username profile.firstName profile.lastName email profile.employeeId role",
         },
         {
           path: "trainerId", // For backward compatibility
-          select: "username profile.firstName profile.lastName email profile.employeeId role",
+          select:
+            "username profile.firstName profile.lastName email profile.employeeId role",
         },
         {
           path: "appliedBy.userId", // For backward compatibility
           select: "username profile role",
-        }
+        },
       ]);
 
       const applicantInfo = this.getApplicantInfo(leave);
@@ -184,23 +189,16 @@ export class LeaveController {
   // ============================================
   async sendLeaveApplicationNotifications(applicantName, leave, userRole) {
     try {
-      const hrAdmins = await User.find({
-        role: { $in: ["HR", "ADMIN"] },
-        status: "ACTIVE",
-      }).select("email profile.firstName profile.lastName");
-
       const applicantInfo = this.getApplicantInfo(leave);
       const applicantRole = applicantInfo.role;
-      
-      let applicant = null;
-      if (applicantInfo.id) {
-        applicant = await User.findById(applicantInfo.id);
-      }
 
-      for (const admin of hrAdmins) {
-        if (admin.email) {
-          await this.emailService.sendLeaveNotification(
-            admin.email,
+      // ✅ For HR leave requests - only notify ADMINS
+      if (applicantRole === "HR") {
+        const adminEmails = await this.emailService.getAdminEmails();
+
+        for (const adminEmail of adminEmails) {
+          await this.emailService.sendHRLeaveNotification(
+            adminEmail,
             applicantName,
             {
               leaveType: leave.leaveType,
@@ -208,17 +206,35 @@ export class LeaveController {
               toDate: leave.toDate,
               numberOfDays: leave.numberOfDays,
               reason: leave.reason,
-              trainerName: applicantName,
-              employeeId: applicant?.profile?.employeeId || "",
-              applicantRole,
             },
           );
         }
+        console.log(
+          `📧 HR leave notification sent to ${adminEmails.length} admins`,
+        );
       }
+      // ✅ For trainer leave requests - notify HR and ADMINS
+      else if (applicantRole === "TRAINER") {
+        const hrAdminEmails = await this.emailService.getHRAndAdminEmails();
 
-      console.log(
-        `📧 Leave application emails sent to ${hrAdmins.length} HR/Admin users for ${applicantRole}`,
-      );
+        for (const email of hrAdminEmails) {
+          await this.emailService.sendLeaveNotification(
+            email,
+            applicantName,
+            {
+              leaveType: leave.leaveType,
+              fromDate: leave.fromDate,
+              toDate: leave.toDate,
+              numberOfDays: leave.numberOfDays,
+              reason: leave.reason,
+            },
+            applicantRole,
+          );
+        }
+        console.log(
+          `📧 Trainer leave notification sent to ${hrAdminEmails.length} HR/Admin users`,
+        );
+      }
     } catch (emailError) {
       console.error("❌ Failed to send email notifications:", emailError);
     }
@@ -264,7 +280,7 @@ export class LeaveController {
         {
           path: "appliedBy.userId",
           select: "username profile role",
-        }
+        },
       ]);
 
       const applicantInfo = this.getApplicantInfo(leave);
@@ -274,7 +290,10 @@ export class LeaveController {
 
       // Send approval email to applicant
       try {
-        const applicantEmail = applicantInfo.email || leave.applicantId?.email || leave.trainerId?.email;
+        const applicantEmail =
+          applicantInfo.email ||
+          leave.applicantId?.email ||
+          leave.trainerId?.email;
         if (applicantEmail) {
           await this.emailService.sendLeaveApprovalEmail(
             applicantEmail,
@@ -357,7 +376,7 @@ export class LeaveController {
         {
           path: "appliedBy.userId",
           select: "username profile role",
-        }
+        },
       ]);
 
       const applicantInfo = this.getApplicantInfo(leave);
@@ -367,7 +386,10 @@ export class LeaveController {
 
       // Send rejection email to applicant
       try {
-        const applicantEmail = applicantInfo.email || leave.applicantId?.email || leave.trainerId?.email;
+        const applicantEmail =
+          applicantInfo.email ||
+          leave.applicantId?.email ||
+          leave.trainerId?.email;
         if (applicantEmail) {
           await this.emailService.sendLeaveApprovalEmail(
             applicantEmail,
@@ -413,59 +435,66 @@ export class LeaveController {
   // ============================================
   // ✅ SEND LEAVE APPROVAL NOTIFICATIONS - Backward compatible
   // ============================================
-  async sendLeaveApprovalNotifications(
-    leave,
-    comments,
-    isApproved,
-    excludeUserId = null,
-  ) {
-    try {
-      const query = {
-        role: { $in: ["HR", "ADMIN"] },
-        status: "ACTIVE",
-      };
+  async sendLeaveApprovalNotifications(leave, comments, isApproved, excludeUserId = null) {
+  try {
+    const applicantInfo = this.getApplicantInfo(leave);
+    const applicantRole = applicantInfo.role;
+    const applicantEmail = applicantInfo.email;
 
-      if (excludeUserId) {
-        query._id = { $ne: excludeUserId };
-      }
-
-      const hrAdmins = await User.find(query).select(
-        "email profile.firstName profile.lastName",
+    // ✅ Always send to the applicant first
+    if (applicantEmail) {
+      await this.emailService.sendLeaveApprovalEmail(
+        applicantEmail,
+        applicantInfo.name,
+        {
+          leaveType: leave.leaveType,
+          fromDate: leave.fromDate,
+          toDate: leave.toDate,
+          numberOfDays: leave.numberOfDays,
+          comments,
+          approvedBy: isApproved ? this.getUserFullName(leave.approvedBy) : null,
+          rejectedBy: !isApproved ? this.getUserFullName(leave.rejectedBy) : null,
+        },
+        isApproved
       );
-
-      const applicantInfo = this.getApplicantInfo(leave);
-      const applicantName = applicantInfo.name;
-      const action = isApproved ? "Approved" : "Rejected";
-      const actionBy = isApproved ? leave.approvedBy : leave.rejectedBy;
-      const actionByName = this.getUserFullName(actionBy);
-      const applicantRole = applicantInfo.role;
-
-      for (const admin of hrAdmins) {
-        if (admin.email) {
-          await this.emailService.sendEmail(
-            admin.email,
-            `Leave ${action}: ${applicantName} (${applicantRole})`,
-            `
-            <h2>Leave Application ${action}</h2>
-            <p>A leave application has been ${action.toLowerCase()}:</p>
-            <ul>
-              <li><strong>Applicant:</strong> ${applicantName}</li>
-              <li><strong>Role:</strong> ${applicantRole}</li>
-              <li><strong>Leave Type:</strong> ${leave.leaveType}</li>
-              <li><strong>Dates:</strong> ${new Date(leave.fromDate).toLocaleDateString()} to ${new Date(leave.toDate).toLocaleDateString()}</li>
-              <li><strong>Duration:</strong> ${leave.numberOfDays} days</li>
-              <li><strong>${action} By:</strong> ${actionByName}</li>
-              ${comments ? `<li><strong>Comments:</strong> ${comments}</li>` : ""}
-            </ul>
-            ${isApproved && applicantRole === "TRAINER" ? "<p>The trainer's leave balance has been updated automatically.</p>" : ""}
-          `,
-          );
-        }
-      }
-    } catch (emailError) {
-      console.error("Failed to send admin notification:", emailError);
     }
+
+    // ✅ Then send to other approvers based on role
+    const query = { role: { $in: ["ADMIN"] }, status: "ACTIVE" };
+    
+    // If it's a trainer leave, also notify HR
+    if (applicantRole === "TRAINER") {
+      query.role.$in.push("HR");
+    }
+
+    if (excludeUserId) {
+      query._id = { $ne: excludeUserId };
+    }
+
+    const approvers = await User.find(query).select("email");
+    
+    for (const approver of approvers) {
+      if (approver.email && approver.email !== applicantEmail) {
+        await this.emailService.sendLeaveApprovalEmail(
+          approver.email,
+          applicantInfo.name,
+          {
+            leaveType: leave.leaveType,
+            fromDate: leave.fromDate,
+            toDate: leave.toDate,
+            numberOfDays: leave.numberOfDays,
+            comments,
+            approvedBy: isApproved ? this.getUserFullName(leave.approvedBy) : null,
+            rejectedBy: !isApproved ? this.getUserFullName(leave.rejectedBy) : null,
+          },
+          isApproved
+        );
+      }
+    }
+  } catch (emailError) {
+    console.error("Failed to send admin notification:", emailError);
   }
+}
 
   // ============================================
   // ✅ CANCEL LEAVE - Backward compatible
@@ -496,12 +525,15 @@ export class LeaveController {
         {
           path: "appliedBy.userId",
           select: "username email profile",
-        }
+        },
       ]);
 
       const applicantInfo = this.getApplicantInfo(leave);
       const applicantName = applicantInfo.name;
-      const applicantEmail = applicantInfo.email || leave.applicantId?.email || leave.trainerId?.email;
+      const applicantEmail =
+        applicantInfo.email ||
+        leave.applicantId?.email ||
+        leave.trainerId?.email;
 
       if (applicantEmail) {
         try {
@@ -561,7 +593,9 @@ export class LeaveController {
       }
 
       const balance = await this.leaveService.getLeaveBalance(userId);
-      const trainer = await User.findById(userId).select("trainerCategory role");
+      const trainer = await User.findById(userId).select(
+        "trainerCategory role",
+      );
 
       if (trainer?.role !== "TRAINER") {
         return res.status(403).json({
@@ -716,7 +750,8 @@ export class LeaveController {
         await leave.populate([
           {
             path: "applicantId",
-            select: "username email profile role trainerCategory leaveBalance isUnlimited",
+            select:
+              "username email profile role trainerCategory leaveBalance isUnlimited",
           },
           {
             path: "trainerId",
@@ -733,7 +768,7 @@ export class LeaveController {
           {
             path: "appliedBy.userId",
             select: "username profile role",
-          }
+          },
         ]);
       }
 
@@ -779,55 +814,55 @@ export class LeaveController {
   // ✅ GET LEAVE HISTORY - Backward compatible
   // ============================================
   // In LeaveController.js - getLeaveHistory
-async getLeaveHistory(req, res, next) {
-  try {
-    const userId = req.params.trainerId || req.user.userId;
-    const userRole = req.user.role;
+  async getLeaveHistory(req, res, next) {
+    try {
+      const userId = req.params.trainerId || req.user.userId;
+      const userRole = req.user.role;
 
-    const filters = {
-      status: req.query.status,
-      leaveType: req.query.leaveType,
-      fromDate: req.query.fromDate,
-      toDate: req.query.toDate,
-      trainerId: req.query.trainerId,
-      trainerCategory: req.query.category,
-      page: Math.max(1, parseInt(req.query.page) || 1),
-      limit: Math.min(100, Math.max(1, parseInt(req.query.limit) || 10)),
-    };
+      const filters = {
+        status: req.query.status,
+        leaveType: req.query.leaveType,
+        fromDate: req.query.fromDate,
+        toDate: req.query.toDate,
+        trainerId: req.query.trainerId,
+        trainerCategory: req.query.category,
+        page: Math.max(1, parseInt(req.query.page) || 1),
+        limit: Math.min(100, Math.max(1, parseInt(req.query.limit) || 10)),
+      };
 
-    const isAdminOrHR = ADMIN_ROLES.includes(userRole);
+      const isAdminOrHR = ADMIN_ROLES.includes(userRole);
 
-    const result = await this.leaveService.getLeaveHistory(
-      userId,
-      filters,
-      isAdminOrHR,
-    );
+      const result = await this.leaveService.getLeaveHistory(
+        userId,
+        filters,
+        isAdminOrHR,
+      );
 
-    // ✅ Only populate if you need additional fields
-    // But since service already populated, you might not need this
-    if (result.leaves && result.leaves.length > 0) {
-      // Optional: Add any additional population here
+      // ✅ Only populate if you need additional fields
+      // But since service already populated, you might not need this
+      if (result.leaves && result.leaves.length > 0) {
+        // Optional: Add any additional population here
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          leaves: result.formattedLeaves || result.leaves, // Use formatted version
+          pagination: result.pagination,
+        },
+        meta: {
+          page: filters.page,
+          limit: filters.limit,
+          total: result.pagination?.total || 0,
+          pages: result.pagination?.pages || 1,
+        },
+        code: "LEAVE_HISTORY_FETCHED",
+      });
+    } catch (error) {
+      console.error("❌ Error in getLeaveHistory:", error);
+      this.handleControllerError(error, res, next);
     }
-
-    res.status(200).json({
-      success: true,
-      data: {
-        leaves: result.formattedLeaves || result.leaves, // Use formatted version
-        pagination: result.pagination
-      },
-      meta: {
-        page: filters.page,
-        limit: filters.limit,
-        total: result.pagination?.total || 0,
-        pages: result.pagination?.pages || 1,
-      },
-      code: "LEAVE_HISTORY_FETCHED",
-    });
-  } catch (error) {
-    console.error("❌ Error in getLeaveHistory:", error);
-    this.handleControllerError(error, res, next);
   }
-}
 
   // ============================================
   // ✅ GET HR LEAVE HISTORY - Backward compatible
@@ -868,7 +903,7 @@ async getLeaveHistory(req, res, next) {
           {
             path: "appliedBy.userId",
             select: "username profile role",
-          }
+          },
         ]);
       }
 
@@ -902,10 +937,7 @@ async getLeaveHistory(req, res, next) {
       // Support both old and new schema
       const leaves = await Leave.find({
         status: "PENDING",
-        $or: [
-          { applicantRole: "HR" },
-          { "appliedBy.role": "HR" }
-        ]
+        $or: [{ applicantRole: "HR" }, { "appliedBy.role": "HR" }],
       })
         .populate("applicantId", "username profile role isUnlimited")
         .populate("trainerId", "username profile role")
@@ -938,8 +970,14 @@ async getLeaveHistory(req, res, next) {
         new: true,
         runValidators: true,
       })
-        .populate("applicantId", "username email profile.firstName profile.lastName")
-        .populate("trainerId", "username email profile.firstName profile.lastName")
+        .populate(
+          "applicantId",
+          "username email profile.firstName profile.lastName",
+        )
+        .populate(
+          "trainerId",
+          "username email profile.firstName profile.lastName",
+        )
         .populate("appliedBy.userId", "username email profile")
         .populate("approvedBy", "username profile.firstName profile.lastName")
         .populate("rejectedBy", "username profile.firstName profile.lastName");
@@ -953,7 +991,7 @@ async getLeaveHistory(req, res, next) {
       }
 
       const applicantInfo = this.getApplicantInfo(leave);
-      
+
       if (req.body.status && applicantInfo.email) {
         try {
           const applicantName = applicantInfo.name;

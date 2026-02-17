@@ -60,53 +60,53 @@ export class AuthController {
   }
 
    async requestPasswordReset(req, res, next) {
-    try {
-      const { email } = req.body;
+  try {
+    const { email } = req.body;
 
-      // ✅ Basic validation
-      if (!email || !email.includes('@')) {
-        return res.status(200).json({
-          success: true,
-          message: "If an account exists with this email, you will receive a password reset link."
-        });
-      }
-
-      // ✅ Call service - won't throw error for non-existent emails
-      const result = await authService.requestPasswordReset(email);
-
-      // ✅ Only send email if we have a valid user and token
-      if (result.success && result.token && result.user) {
-        const resetLink = `${envConfig.FRONTEND_URL}/reset-password?token=${result.token}`;
-        
-        try {
-          await emailService.sendPasswordResetEmail(
-            result.user.email,
-            resetLink,
-            result.user.name
-          );
-          console.log(`📧 Password reset email sent to: ${result.user.email}`);
-        } catch (emailError) {
-          console.error(`❌ Failed to send password reset email:`, emailError);
-          // Don't expose email sending failures to client
-        }
-      }
-
-      // ✅ ALWAYS return the same generic success message
-      res.status(200).json({
-        success: true,
-        message: "If an account exists with this email, you will receive a password reset link."
-      });
-
-    } catch (error) {
-      console.error("❌ Password reset error:", error);
-      
-      // ✅ Even on error, return generic success message
-      res.status(200).json({
+    // ✅ Basic validation
+    if (!email || !email.includes('@')) {
+      return res.status(200).json({
         success: true,
         message: "If an account exists with this email, you will receive a password reset link."
       });
     }
+
+    // ✅ Call service - won't throw error for non-existent emails
+    const result = await authService.requestPasswordReset(email);
+
+    // ✅ Only send email if we have a valid user and token
+    if (result.success && result.token && result.user) {
+      // The token is already the 6-digit number from authService
+      const resetToken = result.token; // This is "244554"
+      
+      try {
+        // ✅ FIXED: Correct parameter order
+        await emailService.sendPasswordResetEmail(
+          result.user.email,     // 1st: email
+          result.user.name,      // 2nd: username (or name)
+          resetToken             // 3rd: 6-digit token
+        );
+        console.log(`📧 Password reset email sent to: ${result.user.email} with token: ${resetToken}`);
+      } catch (emailError) {
+        console.error(`❌ Failed to send password reset email:`, emailError);
+      }
+    }
+
+    // ✅ ALWAYS return the same generic success message
+    res.status(200).json({
+      success: true,
+      message: "If an account exists with this email, you will receive a password reset link."
+    });
+
+  } catch (error) {
+    console.error("❌ Password reset error:", error);
+    
+    res.status(200).json({
+      success: true,
+      message: "If an account exists with this email, you will receive a password reset link."
+    });
   }
+}
 
   async resetPassword(req, res, next) {
     try {
