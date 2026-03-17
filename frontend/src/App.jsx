@@ -2,7 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import LoginForm from "./components/auth/LoginForm.jsx";
 import ChangePassword from "./components/auth/ChangePassword.jsx";
-import ForgotPassword from "./components/auth/ForgetPassword.jsx"; // ✅ ADDED
+import ForgotPassword from "./components/auth/ForgetPassword.jsx";
 import AdminDashboard from "./components/Admin/AdminDashboard.jsx";
 import TrainerDashboard from "./components/Dashboard/TrainerDashboard.jsx";
 import CreateTrainerForm from "./components/Admin/CreateTrainerForm.jsx";
@@ -26,6 +26,8 @@ import ClockedInNow from "./components/Admin/ClockedIn.jsx";
 import HRLeaveSection from "./components/HR/HRLeaveSection.jsx";
 import HRLeaveApproval from "./components/Admin/HRLeaveApproval.jsx";
 import TrainerAttendanceHistory from "./components/Dashboard/TrainerAttendanceHistory.jsx";
+// ✅ NEW: Portfolio Component
+import Portfolio from "./components/Common/Portfolio.jsx";
 
 export default function App() {
   const { isAuthenticated, loading, user } = useAuth();
@@ -60,7 +62,6 @@ export default function App() {
           }
         />
 
-        {/* ✅ ADDED: Forgot Password Routes */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ForgotPassword />} />
 
@@ -96,7 +97,9 @@ export default function App() {
                       path="attendance/history"
                       element={<TrainerAttendanceHistory />}
                     />
-                    {/* Default redirect */}
+                    {/* ✅ NEW: Portfolio route for trainers */}
+                    <Route path="portfolio" element={<Portfolio />} />
+                    <Route path="portfolio/:userId" element={<Portfolio />} />
                     <Route path="" element={<Navigate to="dashboard" replace />} />
                   </Routes>
                 </div>
@@ -124,7 +127,9 @@ export default function App() {
                       path="apply-leave"
                       element={<LeaveApplicationForm />}
                     />
-                    {/* Default redirect */}
+                    {/* ✅ NEW: Portfolio route for HR to view trainers */}
+                    <Route path="portfolio" element={<Portfolio />} />
+                    <Route path="portfolio/:userId" element={<Portfolio />} />
                     <Route path="" element={<Navigate to="dashboard" replace />} />
                   </Routes>
                 </div>
@@ -178,7 +183,9 @@ export default function App() {
                       path="trainers/:id/profile"
                       element={<ProfilePage />}
                     />
-                    {/* Default redirect */}
+                    {/* ✅ NEW: Portfolio route for Admin/HR */}
+                    <Route path="portfolio" element={<Portfolio />} />
+                    <Route path="portfolio/:userId" element={<Portfolio />} />
                     <Route path="" element={<Navigate to="dashboard" replace />} />
                   </Routes>
                 </div>

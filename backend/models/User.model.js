@@ -1,6 +1,6 @@
+// models/User.model.js
 import { Schema, model } from "mongoose";
 import bcrypt from "bcryptjs";
-import { ROLES, HR_LEAVE_CONFIG } from "../config/constant.js";
 
 const userSchema = new Schema(
   {
@@ -42,7 +42,11 @@ const userSchema = new Schema(
       default: "PERMANENT",
     },
 
+    // ============================================
+    // PROFILE SECTION - Role-based fields
+    // ============================================
     profile: {
+      // ========== BASE FIELDS (ALL USERS) ==========
       firstName: {
         type: String,
         required: [true, "First name is required"],
@@ -69,16 +73,18 @@ const userSchema = new Schema(
         unique: true,
         sparse: true,
       },
-      department: String,
-      designation: String,
-      qualification: String,
-      experience: Number,
       bio: String,
       joiningDate: {
         type: Date,
         default: Date.now,
       },
-      skills: [String],
+      avatar: String,
+
+      // ========== ADMIN/HR SPECIFIC FIELDS ==========
+      department: String,
+      designation: String,
+
+      // Client Information (for HR/Admin)
       client: {
         name: String,
         email: String,
@@ -88,8 +94,325 @@ const userSchema = new Schema(
         state: String,
         zipCode: String,
       },
-      avatar: String,
+
+      // ========== TRAINER-ONLY FIELDS ==========
+      // Skills
+      skills: [String],
+
+      // University Information
+      university: {
+        name: String,
+        enrollmentId: String,
+        joinDate: Date,
+        completionDate: Date,
+        status: {
+          type: String,
+          enum: ["ACTIVE", "COMPLETED", "WITHDRAWN"],
+          default: "ACTIVE",
+        },
+      },
+
+      // Subjects
+      // Subjects
+      subjects: [
+        {
+          name: {
+            type: String,
+            required: true,
+          },
+          code: String,
+          year: {
+            type: Number,
+            min: 1,
+            max: 4,
+          },
+          semester: {
+            type: Number,
+            min: 1,
+            max: 8,
+          },
+          credits: Number,
+          syllabus: {
+            type: {
+              type: String,
+              enum: ["link", "text"],
+              default: "link",
+            },
+            version: {
+              type: Number,
+              default: 1,
+            },
+            uploadedAt: Date,
+            uploadedBy: {
+              type: Schema.Types.ObjectId,
+              ref: "User",
+            },
+            uploadedByName: String, // Add this field
+            url: String,
+            filename: String,
+            content: {
+              type: String,
+              default: "",
+            },
+            wordCount: Number, // Add this field
+            preview: String,
+          },
+          // ADD THIS - Syllabus History array
+          syllabusHistory: [
+            {
+              type: {
+                type: String,
+                enum: ["link", "text"],
+              },
+              version: Number,
+              uploadedAt: Date,
+              uploadedBy: {
+                type: Schema.Types.ObjectId,
+                ref: "User",
+              },
+              uploadedByName: String,
+              url: String,
+              filename: String,
+              content: String,
+              wordCount: Number,
+              archivedAt: Date,
+            },
+          ],
+          // Keep changeLog if you still need it
+          changeLog: [
+            {
+              version: Number,
+              type: String,
+              updatedAt: Date,
+              updatedBy: {
+                type: Schema.Types.ObjectId,
+                ref: "User",
+              },
+              summary: String,
+            },
+          ],
+          status: {
+            type: String,
+            enum: ["ACTIVE", "ARCHIVED", "COMPLETED"],
+            default: "ACTIVE",
+          },
+        },
+      ],
+
+      // Semester Activities
+      semesterActivities: [
+        {
+          semester: Number,
+          year: Number,
+          activities: [
+            {
+              title: String,
+              description: String,
+              date: Date,
+              type: {
+                type: String,
+                enum: [
+                  "WORKSHOP",
+                  "SEMINAR",
+                  "PROJECT",
+                  "EVENT",
+                  "ACHIEVEMENT",
+                  "COMPETITION",
+                ],
+              },
+              achievements: [String],
+              mediaUrls: [String],
+              verifiedBy: {
+                type: Schema.Types.ObjectId,
+                ref: "User",
+              },
+            },
+          ],
+          summary: String,
+        },
+      ],
+
+      // Projects
+      projects: [
+        {
+          title: {
+            type: String,
+            required: true,
+          },
+          description: String,
+          type: {
+            type: String,
+            enum: ["ACADEMIC", "INDUSTRY", "RESEARCH", "PERSONAL"],
+          },
+          technologies: [String],
+          role: String,
+          duration: {
+            start: Date,
+            end: Date,
+            ongoing: Boolean,
+          },
+          students: [
+            {
+              name: String,
+              rollNumber: String,
+              contribution: String,
+            },
+          ],
+          outcomes: [String],
+          publications: [
+            {
+              title: String,
+              url: String,
+              date: Date,
+              type: {
+                type: String,
+                enum: ["JOURNAL", "CONFERENCE", "THESIS", "REPORT"],
+              },
+            },
+          ],
+          links: {
+            github: String,
+            demo: String,
+            documentation: String,
+          },
+          media: [
+            {
+              type: String,
+              url: String,
+            },
+          ],
+          verifiedBy: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+          },
+        },
+      ],
+
+      // Qualifications
+      qualifications: [
+        {
+          degree: {
+            type: String,
+            required: true,
+          },
+          specialization: String,
+          university: String,
+          year: Number,
+          percentage: Number,
+          grade: String,
+          type: {
+            type: String,
+            enum: ["UG", "PG", "PHD", "DIPLOMA", "CERTIFICATION"],
+          },
+          certificate: {
+            filename: String,
+            url: String,
+          },
+          verifiedBy: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+          },
+        },
+      ],
+
+      // Experience
+      experience: [
+        {
+          organization: {
+            type: String,
+            required: true,
+          },
+          role: String,
+          duration: {
+            from: Date,
+            to: Date,
+            current: Boolean,
+          },
+          description: String,
+          achievements: [String],
+          type: {
+            type: String,
+            enum: ["TEACHING", "INDUSTRY", "RESEARCH", "ADMINISTRATIVE"],
+          },
+          certificate: {
+            filename: String,
+            url: String,
+          },
+          verifiedBy: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+          },
+        },
+      ],
+
+      // Certifications
+      certifications: [
+        {
+          name: {
+            type: String,
+            required: true,
+          },
+          issuingOrganization: String,
+          issueDate: Date,
+          expiryDate: Date,
+          credentialId: String,
+          credentialUrl: String,
+          skills: [String],
+          certificate: {
+            filename: String,
+            url: String,
+          },
+          verifiedBy: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+          },
+        },
+      ],
+
+      // Placement Record
+      placementRecord: {
+        coordinator: {
+          name: String,
+          email: String,
+          phone: String,
+        },
+        stats: [
+          {
+            year: Number,
+            totalStudents: Number,
+            placedStudents: Number,
+            placementPercentage: Number,
+            highestPackage: Number,
+            averagePackage: Number,
+            medianPackage: Number,
+          },
+        ],
+        companies: [
+          {
+            name: String,
+            year: Number,
+            studentsPlaced: Number,
+            packages: {
+              highest: Number,
+              average: Number,
+              lowest: Number,
+            },
+            roles: [String],
+            visitDate: Date,
+          },
+        ],
+        topRecruiters: [String],
+        lastUpdated: Date,
+
+        verifiedBy: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+        },
+        verifiedAt: Date,
+        verifiedRemarks: String,
+      },
     },
+
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -105,75 +428,28 @@ const userSchema = new Schema(
       },
     ],
 
-    // ✅ FIXED: Proper leave balance structure
+    // Leave Balance Section
     leaveBalance: {
       sick: {
-        available: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-        used: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-        carryForward: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
+        available: { type: Number, default: 0, min: 0 },
+        used: { type: Number, default: 0, min: 0 },
+        carryForward: { type: Number, default: 0, min: 0 },
       },
       casual: {
-        available: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-        used: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-        carryForward: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
+        available: { type: Number, default: 0, min: 0 },
+        used: { type: Number, default: 0, min: 0 },
+        carryForward: { type: Number, default: 0, min: 0 },
       },
       paid: {
-        available: {
-          type: Number,
-          default: 9999,
-          min: 0,
-        },
-        used: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-        carryForward: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
+        available: { type: Number, default: 9999, min: 0 },
+        used: { type: Number, default: 0, min: 0 },
+        carryForward: { type: Number, default: 0, min: 0 },
       },
-      lastUpdated: {
-        type: Date,
-        default: Date.now,
-      },
-      lastIncrementDate: {
-        type: Date,
-        default: Date.now, // Will be current date for new trainers
-      },
-      lastRolloverDate: {
-        type: Date,
-      },
+      lastUpdated: { type: Date, default: Date.now },
+      lastIncrementDate: { type: Date, default: Date.now },
+      lastRolloverDate: Date,
     },
-    isUnlimited: {
-      type: Boolean,
-      default: false,
-    },
+    isUnlimited: { type: Boolean, default: false },
 
     leaveHistory: [
       {
@@ -201,14 +477,8 @@ const userSchema = new Schema(
         previousBalance: Schema.Types.Mixed,
         newBalance: Schema.Types.Mixed,
         daysAffected: Number,
-        modifiedBy: {
-          type: Schema.Types.ObjectId,
-          ref: "User",
-        },
-        date: {
-          type: Date,
-          default: Date.now,
-        },
+        modifiedBy: { type: Schema.Types.ObjectId, ref: "User" },
+        date: { type: Date, default: Date.now },
         reason: String,
       },
     ],
@@ -219,17 +489,11 @@ const userSchema = new Schema(
       default: "ACTIVE",
     },
 
-    loginAttempts: {
-      type: Number,
-      default: 0,
-    },
+    loginAttempts: { type: Number, default: 0 },
     lockUntil: Date,
     passwordResetToken: String,
     passwordResetExpire: Date,
-    emailVerified: {
-      type: Boolean,
-      default: false,
-    },
+    emailVerified: { type: Boolean, default: false },
     deletedAt: Date,
   },
   {
@@ -237,7 +501,14 @@ const userSchema = new Schema(
     toJSON: {
       virtuals: true,
       transform: function (doc, ret) {
-        // ✅ FIXED: Handle HR unlimited leaves
+        // Remove sensitive fields
+        delete ret.password;
+        delete ret.passwordResetToken;
+        delete ret.passwordResetExpire;
+        delete ret.loginAttempts;
+        delete ret.lockUntil;
+
+        // Handle HR unlimited leaves
         if (ret.role === "HR" && ret.leaveBalance?.isUnlimited) {
           ret.leaveBalance = {
             sick: { available: "Unlimited", used: 0, carryForward: 0 },
@@ -265,15 +536,46 @@ const userSchema = new Schema(
                 : ret.leaveBalance.paid.available;
           }
         }
+
+        // For non-trainers, remove trainer-specific fields from response
+        if (ret.role !== "TRAINER" && ret.profile) {
+          const trainerFields = [
+            "skills",
+            "university",
+            "subjects",
+            "semesterActivities",
+            "projects",
+            "qualifications",
+            "experience",
+            "certifications",
+            "placementRecord",
+          ];
+
+          trainerFields.forEach((field) => {
+            if (ret.profile[field]) {
+              ret.profile[field] = undefined;
+            }
+          });
+        }
+
+        // For trainers, remove admin-specific fields
+        if (ret.role === "TRAINER" && ret.profile) {
+          ret.profile.department = undefined;
+          ret.profile.designation = undefined;
+          ret.profile.client = undefined;
+        }
+
         return ret;
       },
     },
   },
 );
 
-// ✅ FIXED: CORRECTED pre('validate') hook
+// ============================================
+// PRE-VALIDATION HOOK - Role-based field cleanup
+// ============================================
 userSchema.pre("validate", function (next) {
-  // 1. Role-category validation
+  // Role-category validation
   if (this.role !== "TRAINER" && this.trainerCategory) {
     this.trainerCategory = undefined;
   }
@@ -283,32 +585,97 @@ userSchema.pre("validate", function (next) {
     return next(error);
   }
 
-  // 2. Initialize leave balance for new TRAINER users
-  if (this.role === "TRAINER" && this.isNew) {
-    console.log(
-      `🚀 Initializing leave balance for new ${this.trainerCategory} trainer`,
-    );
+  // ============================================
+  // CLEAN UP FIELDS BASED ON ROLE
+  // ============================================
 
-    // ✅ FIXED: New trainers start with ZERO sick/casual leaves
-    // They get leaves AFTER 30 days of work (through auto-increment)
+  // For ADMIN/HR users - strip out trainer-specific fields
+  if (this.role === "ADMIN" || this.role === "HR") {
+    if (this.profile) {
+      const trainerOnlyFields = [
+        "skills",
+        "university",
+        "subjects",
+        "semesterActivities",
+        "projects",
+        "qualifications",
+        "experience",
+        "certifications",
+        "placementRecord",
+      ];
+
+      trainerOnlyFields.forEach((field) => {
+        if (this.profile[field]) {
+          this.profile[field] = undefined;
+        }
+      });
+    }
+  }
+
+  // For TRAINER users - clean up admin fields and initialize arrays
+  if (this.role === "TRAINER") {
+    if (this.profile) {
+      // Remove admin-specific fields
+      this.profile.department = undefined;
+      this.profile.designation = undefined;
+      this.profile.client = undefined;
+
+      // Initialize arrays for new trainers
+      if (this.isNew) {
+        if (!this.profile.university) this.profile.university = {};
+        if (!this.profile.subjects) this.profile.subjects = [];
+        if (!this.profile.semesterActivities)
+          this.profile.semesterActivities = [];
+        if (!this.profile.projects) this.profile.projects = [];
+        if (!this.profile.qualifications) this.profile.qualifications = [];
+        if (!this.profile.experience) this.profile.experience = [];
+        if (!this.profile.certifications) this.profile.certifications = [];
+        if (!this.profile.placementRecord) this.profile.placementRecord = {};
+      }
+    }
+  }
+
+  userSchema.pre("save", function (next) {
+    // Auto-sync enrollmentId with employeeId for trainers
+    if (this.role === "TRAINER" && this.profile?.employeeId) {
+      if (!this.profile.university) this.profile.university = {};
+      this.profile.university.enrollmentId = this.profile.employeeId;
+    }
+
+    // ✅ AUTO-SYNC: University join date with main joining date
+    if (this.role === "TRAINER" && this.profile?.joiningDate) {
+      if (!this.profile.university) this.profile.university = {};
+      // Only set if not already set or if joining date changed
+      if (
+        !this.profile.university.joinDate ||
+        this.isModified("profile.joiningDate")
+      ) {
+        this.profile.university.joinDate = this.profile.joiningDate;
+      }
+    }
+
+    next();
+  });
+
+  next();
+});
+
+// ============================================
+// LEAVE BALANCE INITIALIZATION
+// ============================================
+userSchema.pre("validate", function (next) {
+  // Initialize leave balance for new TRAINER users
+  if (this.role === "TRAINER" && this.isNew) {
     if (this.trainerCategory === "PERMANENT") {
-      // Set lastIncrementDate to CURRENT DATE (not 30 days ago)
-      // This means they need to work 30 days before first increment
       this.leaveBalance = {
-        sick: { available: 0, used: 0, carryForward: 0 }, // ✅ Start with 0
-        casual: { available: 0, used: 0, carryForward: 0 }, // ✅ Start with 0
+        sick: { available: 0, used: 0, carryForward: 0 },
+        casual: { available: 0, used: 0, carryForward: 0 },
         paid: { available: 9999, used: 0, carryForward: 0 },
-        lastIncrementDate: new Date(), // ✅ Current date - will be incremented after 30 days
+        lastIncrementDate: new Date(),
         lastUpdated: new Date(),
         lastRolloverDate: null,
       };
-
-      console.log(`📊 New PERMANENT trainer: 0 sick, 0 casual leaves`);
-      console.log(
-        `📅 First increment will be after 30 days from: ${new Date()}`,
-      );
     } else if (this.trainerCategory === "CONTRACTED") {
-      // Contracted trainers only get paid leave
       this.leaveBalance = {
         sick: { available: 0, used: 0, carryForward: 0 },
         casual: { available: 0, used: 0, carryForward: 0 },
@@ -335,12 +702,8 @@ userSchema.pre("validate", function (next) {
     }
   }
 
-  // ✅ ADDED: Initialize leave balance for new HR users
+  // Initialize leave balance for new HR users
   if (this.role === "HR" && this.isNew) {
-    console.log(
-      `🚀 Initializing leave balance for new HR user: ${this.username}`,
-    );
-
     this.leaveBalance = {
       sick: { available: 0, used: 0, carryForward: 0 },
       casual: { available: 0, used: 0, carryForward: 0 },
@@ -348,10 +711,9 @@ userSchema.pre("validate", function (next) {
       lastUpdated: new Date(),
       lastIncrementDate: null,
       lastRolloverDate: null,
-      isUnlimited: true, // ✅ HR has unlimited leaves
+      isUnlimited: true,
     };
 
-    // Initialize leave history
     if (!this.leaveHistory || this.leaveHistory.length === 0) {
       this.leaveHistory = [
         {
@@ -371,38 +733,9 @@ userSchema.pre("validate", function (next) {
   next();
 });
 
-// ✅ ADDED: Helper method to check if user has unlimited leaves
-userSchema.methods.hasUnlimitedLeaves = function () {
-  return (
-    this.role === "HR" ||
-    this.leaveBalance?.paid?.available >= 9999 ||
-    this.leaveBalance?.isUnlimited === true
-  );
-};
-
-// ✅ ADDED: Method to check if user can approve/reject leaves
-userSchema.methods.canApproveLeaves = function () {
-  if (this.role === "ADMIN") return true;
-  if (this.role === "HR") return true;
-  return false;
-};
-
-// ✅ ADDED: Method to check if user can approve specific applicant
-userSchema.methods.canApproveApplicant = function (applicantRole) {
-  if (this.role === "ADMIN") return true; // Admin can approve anyone
-  if (this.role === "HR" && applicantRole === "TRAINER") return true; // HR can only approve trainers
-  return false;
-};
-
-// ✅ ADDED: Method to check if user can apply for leave
-userSchema.methods.canApplyForLeave = function () {
-  return this.role === "TRAINER" || this.role === "HR"; // ADMIN cannot apply
-};
-
-// ✅ FIXED: Also need to update the auto-increment eligibility logic
-// in the service/controller to handle this correctly
-
-// Custom validation to ensure only one ADMIN exists
+// ============================================
+// CUSTOM VALIDATIONS
+// ============================================
 userSchema.pre("save", async function (next) {
   if (this.role === "ADMIN" && this.isNew) {
     const existingAdmin = await this.constructor.findOne({ role: "ADMIN" });
@@ -414,7 +747,7 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-// Ensure joiningDate is set on creation
+// Ensure joiningDate is set
 userSchema.pre("save", function (next) {
   if (this.isNew && !this.profile.joiningDate) {
     this.profile.joiningDate = new Date();
@@ -434,7 +767,11 @@ userSchema.pre("save", async function (next) {
   }
 });
 
-// Compare password method
+// ============================================
+// INSTANCE METHODS
+// ============================================
+
+// Compare password
 userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
@@ -466,51 +803,51 @@ userSchema.methods.resetLoginAttempts = async function () {
   return this.save();
 };
 
-// Get public profile
-userSchema.methods.toJSON = function () {
-  const obj = this.toObject();
-
-  delete obj.password;
-  delete obj.passwordResetToken;
-  delete obj.passwordResetExpire;
-  delete obj.loginAttempts;
-  delete obj.lockUntil;
-
-  // ✅ FIXED: Handle case where paid might be a number or object
-  if (obj.leaveBalance && obj.leaveBalance.paid) {
-    if (typeof obj.leaveBalance.paid === "number") {
-      obj.leaveBalance.paid = {
-        available:
-          obj.leaveBalance.paid >= 9999 ? "Unlimited" : obj.leaveBalance.paid,
-        used: 0,
-        carryForward: 0,
-      };
-    } else if (obj.leaveBalance.paid.available !== undefined) {
-      obj.leaveBalance.paid.available =
-        obj.leaveBalance.paid.available >= 9999
-          ? "Unlimited"
-          : obj.leaveBalance.paid.available;
-    }
-  }
-
-  return obj;
+// Role checks
+userSchema.methods.isTrainer = function () {
+  return this.role === "TRAINER";
 };
 
-// ✅ FIXED: Helper method to check if user is eligible for auto-increment
+userSchema.methods.isAdminOrHR = function () {
+  return ["ADMIN", "HR"].includes(this.role);
+};
+
+// Unlimited leaves check
+userSchema.methods.hasUnlimitedLeaves = function () {
+  return (
+    this.role === "HR" ||
+    this.leaveBalance?.paid?.available >= 9999 ||
+    this.leaveBalance?.isUnlimited === true
+  );
+};
+
+// Approval permissions
+userSchema.methods.canApproveLeaves = function () {
+  return this.role === "ADMIN" || this.role === "HR";
+};
+
+userSchema.methods.canApproveApplicant = function (applicantRole) {
+  if (this.role === "ADMIN") return true;
+  if (this.role === "HR" && applicantRole === "TRAINER") return true;
+  return false;
+};
+
+// Leave application permission
+userSchema.methods.canApplyForLeave = function () {
+  return this.role === "TRAINER" || this.role === "HR";
+};
+
+// Auto-increment methods
 userSchema.methods.canAutoIncrement = function () {
-  if (this.role !== "TRAINER") return false;
+  if (!this.isTrainer()) return false;
   if (this.trainerCategory !== "PERMANENT") return false;
   if (this.status !== "ACTIVE") return false;
   return true;
 };
 
-// ✅ FIXED: Method to check if user can receive monthly increment
 userSchema.methods.isEligibleForIncrement = function () {
   if (!this.canAutoIncrement()) return false;
-
-  if (!this.leaveBalance || !this.leaveBalance.lastIncrementDate) {
-    return false; // New trainer needs to wait
-  }
+  if (!this.leaveBalance || !this.leaveBalance.lastIncrementDate) return false;
 
   const now = new Date();
   const lastIncrement = new Date(this.leaveBalance.lastIncrementDate);
@@ -521,28 +858,9 @@ userSchema.methods.isEligibleForIncrement = function () {
   return daysSinceLastIncrement >= 30;
 };
 
-// Helper method to get available leave days
-userSchema.methods.getAvailableLeave = function (leaveType) {
-  if (!this.leaveBalance || !this.leaveBalance[leaveType]) {
-    return 0;
-  }
-
-  const balance = this.leaveBalance[leaveType];
-  if (leaveType === "paid" && balance.available >= 9999) {
-    return "Unlimited";
-  }
-
-  return balance.available;
-};
-
-// Method to get days until next increment
 userSchema.methods.getDaysUntilNextIncrement = function () {
-  if (
-    !this.canAutoIncrement() ||
-    !this.leaveBalance ||
-    !this.leaveBalance.lastIncrementDate
-  ) {
-    return 30; // New trainer has 30 days to wait
+  if (!this.canAutoIncrement() || !this.leaveBalance?.lastIncrementDate) {
+    return 30;
   }
 
   const now = new Date();
@@ -554,7 +872,6 @@ userSchema.methods.getDaysUntilNextIncrement = function () {
   return Math.max(0, 30 - daysSinceLastIncrement);
 };
 
-// Method to increment leaves
 userSchema.methods.incrementLeaves = async function () {
   if (!this.canAutoIncrement()) {
     throw new Error("User is not eligible for leave increment");
@@ -572,10 +889,7 @@ userSchema.methods.incrementLeaves = async function () {
     type: "AUTO_INCREMENT",
     leaveType: "ALL",
     previousBalance: { casual: currentCasual, sick: currentSick },
-    newBalance: {
-      casual: currentCasual + 1,
-      sick: currentSick + 1,
-    },
+    newBalance: { casual: currentCasual + 1, sick: currentSick + 1 },
     daysAffected: 0,
     modifiedBy: null,
     date: new Date(),
@@ -585,7 +899,48 @@ userSchema.methods.incrementLeaves = async function () {
   return this.save();
 };
 
-// Static method to get all permanent trainers eligible for increment
+// Portfolio helper methods (trainers only)
+userSchema.methods.getPortfolioSummary = function () {
+  if (!this.isTrainer()) {
+    return null;
+  }
+
+  return {
+    university: this.profile.university?.name || null,
+    subjectsCount: this.profile.subjects?.length || 0,
+    projectsCount: this.profile.projects?.length || 0,
+    qualificationsCount: this.profile.qualifications?.length || 0,
+    experienceCount: this.profile.experience?.length || 0,
+    certificationsCount: this.profile.certifications?.length || 0,
+    skills: this.profile.skills || [],
+  };
+};
+
+userSchema.methods.getPlacementStats = function () {
+  if (!this.isTrainer()) {
+    return null;
+  }
+
+  const stats = this.profile.placementRecord?.stats || [];
+  const latestYear =
+    stats.length > 0
+      ? stats.reduce((latest, current) =>
+          current.year > latest.year ? current : latest,
+        )
+      : null;
+
+  return {
+    totalCompanies: this.profile.placementRecord?.companies?.length || 0,
+    topRecruiters: this.profile.placementRecord?.topRecruiters || [],
+    latestStats: latestYear,
+    coordinator: this.profile.placementRecord?.coordinator,
+  };
+};
+
+// ============================================
+// STATIC METHODS
+// ============================================
+
 userSchema.statics.getEligibleTrainersForIncrement = function () {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -598,7 +953,6 @@ userSchema.statics.getEligibleTrainersForIncrement = function () {
   });
 };
 
-// Static method to get all permanent trainers
 userSchema.statics.getPermanentTrainers = function () {
   return this.find({
     role: "TRAINER",
@@ -607,7 +961,6 @@ userSchema.statics.getPermanentTrainers = function () {
   });
 };
 
-// Static method to get all contracted trainers
 userSchema.statics.getContractedTrainers = function () {
   return this.find({
     role: "TRAINER",
@@ -616,31 +969,6 @@ userSchema.statics.getContractedTrainers = function () {
   });
 };
 
-// Static method to fix all permanent trainers' lastIncrementDate (if needed for testing)
-userSchema.statics.setTrainersEligibleForIncrement = async function () {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  const result = await this.updateMany(
-    {
-      role: "TRAINER",
-      trainerCategory: "PERMANENT",
-      status: "ACTIVE",
-    },
-    {
-      $set: {
-        "leaveBalance.lastIncrementDate": thirtyDaysAgo,
-      },
-    },
-  );
-
-  console.log(
-    `✅ Set ${result.modifiedCount} permanent trainers as eligible for increment`,
-  );
-  return result;
-};
-
-// ✅ ADDED: Static method to get all active HR users
 userSchema.statics.getActiveHRUsers = function () {
   return this.find({
     role: "HR",
@@ -648,15 +976,31 @@ userSchema.statics.getActiveHRUsers = function () {
   }).select("_id username email profile leaveBalance");
 };
 
-// ✅ ADDED: Static method to get pending HR leaves (for admin)
-userSchema.statics.getPendingHRLeaves = async function () {
-  const Leave = this.db.model("Leave");
-  return Leave.find({
-    status: "PENDING",
-    "appliedBy.role": "HR",
-  }).populate("trainerId", "username email profile");
+userSchema.statics.getAdmin = function () {
+  return this.findOne({ role: "ADMIN" });
 };
-// Create indexes
+
+// Get trainers with placement records
+userSchema.statics.getTrainersWithPlacement = function () {
+  return this.find({
+    role: "TRAINER",
+    "profile.placementRecord.stats": { $exists: true, $ne: [] },
+  }).select(
+    "username email profile.firstName profile.lastName profile.placementRecord",
+  );
+};
+
+// Get trainers with specific skills
+userSchema.statics.getTrainersBySkills = function (skills) {
+  return this.find({
+    role: "TRAINER",
+    "profile.skills": { $in: skills },
+  });
+};
+
+// ============================================
+// INDEXES
+// ============================================
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
 userSchema.index({ trainerCategory: 1 });
@@ -667,9 +1011,11 @@ userSchema.index({ createdBy: 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ "leaveBalance.lastIncrementDate": 1 });
 
-// Static method to get the single admin
-userSchema.statics.getAdmin = function () {
-  return this.findOne({ role: "ADMIN" });
-};
+// Portfolio field indexes
+userSchema.index({ "profile.skills": 1 });
+userSchema.index({ "profile.qualifications.type": 1 });
+userSchema.index({ "profile.experience.type": 1 });
+userSchema.index({ "profile.certifications.issuingOrganization": 1 });
+userSchema.index({ "profile.placementRecord.stats.year": 1 });
 
 export default model("User", userSchema);

@@ -13,6 +13,7 @@ import { authenticate } from './middleware/auth.middleware.js';
 import authRoutes from './routes/auth.routes.js';
 import usersRoutes from './routes/user.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import portfolioRoutes from './routes/portfolio.routes.js';
 import attendanceRoutes from './routes/attendance.routes.js';
 import leavesRoutes from './routes/leave.routes.js';
 import notificationsRoutes from './routes/notifications.routes.js';
@@ -53,6 +54,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', authenticate, usersRoutes);
 app.use('/api/admin', authenticate, adminRoutes);
+app.use('/api/portfolio', authenticate, portfolioRoutes);
 app.use('/api/attendance', authenticate, attendanceRoutes);
 app.use('/api/leaves', authenticate, leavesRoutes);
 app.use('/api/notifications', authenticate, notificationsRoutes);

@@ -17,7 +17,9 @@ import {
   Clock,
   Briefcase,
   Infinity,
-  CheckCircle,
+  FolderGit2,
+  Award,
+  TrendingUp,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -58,17 +60,12 @@ export default function Navbar() {
     <nav className="bg-white shadow-md border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
         {/* Logo */}
-        {/* <div
+        <div
           onClick={handleDashboardNavigation}
           className="flex items-center gap-3 cursor-pointer"
         >
           <div className="text-2xl font-bold text-blue-600">TrainerSync</div>
-          <div className="hidden md:block text-sm text-gray-500">
-            {isAdmin && "Administrator Panel"}
-            {isHR && "HR Management Panel"}
-            {isTrainer && "Trainer Dashboard"}
-          </div>
-        </div> */}
+        </div>
 
         {/* Mobile Menu Button */}
         <button
@@ -79,7 +76,7 @@ export default function Navbar() {
         </button>
 
         {/* Desktop Menu */}
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden md:flex items-center gap-2">
           {/* Dashboard */}
           <button
             onClick={handleDashboardNavigation}
@@ -90,8 +87,70 @@ export default function Navbar() {
             }`}
           >
             <Home size={18} />
-            <span className="hidden sm:block">Dashboard</span>
+            <span>Dashboard</span>
           </button>
+
+          {/* Portfolio Menu - For All Users */}
+          {(isAdmin || isHR || isTrainer) && (
+            <div className="relative">
+              <button
+                onClick={() => toggleMenu("portfolio")}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                  location.pathname.includes("/portfolio")
+                    ? "bg-green-100 text-green-700"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <FolderGit2 size={18} />
+                <span>Portfolio</span>
+                <ChevronDown size={16} />
+              </button>
+              {openMenu === "portfolio" && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50 py-1">
+                  {isTrainer && (
+                    <button
+                      onClick={() => handleNavigation("/trainer/portfolio")}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <FolderGit2 size={16} className="text-gray-500" /> My Portfolio
+                    </button>
+                  )}
+                  {(isAdmin || isHR) && (
+                    <>
+                      <button
+                        onClick={() => handleNavigation("/admin/portfolio")}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                      >
+                        <FolderGit2 size={16} className="text-gray-500" /> All Portfolios
+                      </button>
+                      <div className="border-t my-1"></div>
+                      <div className="px-4 py-1.5 text-xs text-gray-500 font-semibold">
+                        QUICK LINKS
+                      </div>
+                      <button
+                        onClick={() => handleNavigation("/admin/portfolio?tab=qualifications")}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                      >
+                        <Award size={16} className="text-gray-500" /> Qualifications
+                      </button>
+                      <button
+                        onClick={() => handleNavigation("/admin/portfolio?tab=projects")}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                      >
+                        <FolderGit2 size={16} className="text-gray-500" /> Projects
+                      </button>
+                      <button
+                        onClick={() => handleNavigation("/admin/portfolio?tab=placement")}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                      >
+                        <TrendingUp size={16} className="text-gray-500" /> Placement Records
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* HR/Admin Menu - Only for Admin (Create HR) */}
           {isAdmin && (
@@ -105,23 +164,23 @@ export default function Navbar() {
                 }`}
               >
                 <Shield size={18} />
-                <span className="hidden sm:block">HR/Admin</span>
+                <span>HR/Admin</span>
                 <ChevronDown size={16} />
               </button>
               {openMenu === "hr" && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50 py-1">
                   <button
                     onClick={() => handleNavigation("/admin/hr/create")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <UserPlus size={16} /> Create HR/Admin
+                    <UserPlus size={16} className="text-gray-500" /> Create HR/Admin
                   </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* ✅ HR Leave Menu - For HR to view their own leaves */}
+          {/* HR Leave Menu - For HR to view their own leaves */}
           {isHR && (
             <div className="relative">
               <button
@@ -133,23 +192,23 @@ export default function Navbar() {
                 }`}
               >
                 <Briefcase size={18} />
-                <span className="hidden sm:block">My Leaves</span>
+                <span>My Leaves</span>
                 <Infinity size={14} className="text-purple-500" />
                 <ChevronDown size={16} />
               </button>
               {openMenu === "hr-leaves" && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50 py-1">
                   <button
                     onClick={() => handleNavigation("/hr/leaves/my-leaves")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <FileText size={16} /> My Leave Requests
+                    <FileText size={16} className="text-gray-500" /> My Leave Requests
                   </button>
                   <button
                     onClick={() => handleNavigation("/hr/apply-leave")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Calendar size={16} /> Apply for Leave
+                    <Calendar size={16} className="text-gray-500" /> Apply for Leave
                   </button>
                 </div>
               )}
@@ -168,28 +227,28 @@ export default function Navbar() {
                 }`}
               >
                 <Users size={18} />
-                <span className="hidden sm:block">Trainers</span>
+                <span>Trainers</span>
                 <ChevronDown size={16} />
               </button>
               {openMenu === "trainers" && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50 py-1">
                   <button
                     onClick={() => handleNavigation("/admin/trainers")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Users size={16} /> All Trainers
+                    <Users size={16} className="text-gray-500" /> All Trainers
                   </button>
                   <button
                     onClick={() => handleNavigation("/admin/trainers/create")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <User size={16} /> Create Trainer
+                    <User size={16} className="text-gray-500" /> Create Trainer
                   </button>
                   <button
                     onClick={() => handleNavigation("/admin/clocked-in")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Clock size={16} /> Currently Clocked In
+                    <Clock size={16} className="text-gray-500" /> Currently Clocked In
                   </button>
                 </div>
               )}
@@ -198,37 +257,32 @@ export default function Navbar() {
 
           {/* Attendance Menu - For Admin/HR */}
           {(isAdmin || isHR) && (
-            <div className="relative">
-              <button
-                onClick={() => handleNavigation("/admin/attendance")}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                  location.pathname.includes("/admin/attendance")
-                    ? "bg-orange-100 text-orange-700"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                <Clock size={18} />
-                <span className="hidden sm:block">Attendance</span>
-              </button>
-            </div>
+            <button
+              onClick={() => handleNavigation("/admin/attendance")}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                location.pathname.includes("/admin/attendance")
+                  ? "bg-orange-100 text-orange-700"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              <Clock size={18} />
+              <span>Attendance</span>
+            </button>
           )}
 
-          {/* ✅ HR Leave Approvals - Only for ADMIN */}
+          {/* HR Leave Approvals - Only for ADMIN */}
           {isAdmin && (
-            <div className="relative">
-              <button
-                onClick={() => handleNavigation("/admin/leaves/hr-approvals")}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                  location.pathname.includes("/admin/leaves/hr-approvals")
-                    ? "bg-purple-100 text-purple-700"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                <Briefcase size={18} />
-                <span className="hidden sm:block">HR Leaves</span>
-                
-              </button>
-            </div>
+            <button
+              onClick={() => handleNavigation("/admin/leaves/hr-approvals")}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                location.pathname.includes("/admin/leaves/hr-approvals")
+                  ? "bg-purple-100 text-purple-700"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              <Briefcase size={18} />
+              <span>HR Leaves</span>
+            </button>
           )}
 
           {/* Leaves Menu - For Admin/HR (Trainer Leave Management) */}
@@ -244,22 +298,22 @@ export default function Navbar() {
                 }`}
               >
                 <Calendar size={18} />
-                <span className="hidden sm:block">Trainer Leaves</span>
+                <span>Trainer Leaves</span>
                 <ChevronDown size={16} />
               </button>
               {openMenu === "leaves" && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50 py-1">
                   <button
                     onClick={() => handleNavigation("/admin/leaves")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <FileText size={16} /> Leave Management
+                    <FileText size={16} className="text-gray-500" /> Leave Management
                   </button>
                   <button
                     onClick={() => handleNavigation("/admin/leaves/reports")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <FileText size={16} /> Leave Reports
+                    <FileText size={16} className="text-gray-500" /> Leave Reports
                   </button>
                 </div>
               )}
@@ -279,75 +333,39 @@ export default function Navbar() {
                 }`}
               >
                 <Calendar size={18} />
-                <span className="hidden sm:block">My Leaves</span>
+                <span>My Leaves</span>
                 <ChevronDown size={16} />
               </button>
               {openMenu === "trainer-leaves" && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50 py-1">
                   <button
                     onClick={() => handleNavigation("/trainer/apply-leave")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Calendar size={16} /> Apply for Leave
+                    <Calendar size={16} className="text-gray-500" /> Apply for Leave
                   </button>
                   <button
                     onClick={() => handleNavigation("/trainer/leaves/reports")}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <FileText size={16} /> Leave History
+                    <FileText size={16} className="text-gray-500" /> Leave History
                   </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* Profile Menu - For All Users */}
-          <div className="relative">
-            <button
-              onClick={() => toggleMenu("profile")}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                location.pathname.includes("/profile") 
-                  ? "bg-orange-100 text-orange-700"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <User size={18} />
-              <span className="hidden sm:block">Profile</span>
-              <ChevronDown size={16} />
-            </button>
-            {openMenu === "profile" && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50">
-                <button
-                  onClick={() => 
-                    isAdmin || isHR
-                      ? handleNavigation("/admin/profile") 
-                      : handleNavigation("/trainer/profile")
-                  }
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
-                >
-                  <UserCog size={16} /> My Profile
-                </button>
-                {/* <button
-                  onClick={() => handleNavigation("/change-password")}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
-                >
-                  <Settings size={16} /> Change Password
-                </button> */}
-              </div>
-            )}
-          </div>
-
-          {/* User Profile Dropdown */}
-          <div className="relative">
+          {/* ✅ MERGED: User Menu with Profile & Logout */}
+          <div className="relative ml-2">
             <button
               onClick={() => toggleMenu("user")}
-              className="flex items-center gap-3 pl-3 border-l border-gray-200 hover:bg-gray-50 rounded-lg px-3 py-2"
+              className="flex items-center gap-3 pl-3 border-l border-gray-200 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
             >
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
                 <User size={16} className="text-white" />
               </div>
-              <div className="hidden md:block text-right">
-                <div className="text-sm font-medium text-gray-800">
+              <div className="hidden lg:block text-right min-w-[100px]">
+                <div className="text-sm font-medium text-gray-800 truncate max-w-[120px]">
                   {user?.profile?.firstName} {user?.profile?.lastName}
                 </div>
                 <div className="text-xs text-gray-500 capitalize flex items-center justify-end gap-1">
@@ -355,20 +373,47 @@ export default function Navbar() {
                   {isHR && (
                     <span className="text-purple-500 flex items-center gap-0.5">
                       <Infinity size={12} />
-                      <span>unlimited</span>
                     </span>
                   )}
                 </div>
               </div>
-              <ChevronDown size={16} className="text-gray-500" />
+              <ChevronDown size={16} className="text-gray-500 flex-shrink-0" />
             </button>
+            
             {openMenu === "user" && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-50">
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
+                {/* Profile Section */}
+                <button
+                  onClick={() => 
+                    isAdmin || isHR
+                      ? handleNavigation("/admin/profile") 
+                      : handleNavigation("/trainer/profile")
+                  }
+                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                >
+                  <UserCog size={16} className="text-gray-500" />
+                  <span>My Profile</span>
+                </button>
+                
+                {/* Change Password */}
+                <button
+                  onClick={() => handleNavigation("/change-password")}
+                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                >
+                  <Settings size={16} className="text-gray-500" />
+                  <span>Change Password</span>
+                </button>
+                
+                {/* Divider */}
+                <div className="border-t border-gray-100 my-1"></div>
+                
+                {/* Logout */}
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-2"
+                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
                 >
-                  <LogOut size={16} /> Logout
+                  <LogOut size={16} />
+                  <span>Logout</span>
                 </button>
               </div>
             )}
@@ -378,23 +423,75 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-white border-t shadow-lg max-h-screen overflow-y-auto">
-          <div className="flex flex-col px-4 py-3 space-y-3">
+        <div className="md:hidden bg-white border-t border-gray-200 shadow-lg">
+          <div className="px-4 py-3 space-y-1 max-h-[calc(100vh-4rem)] overflow-y-auto">
             {/* Dashboard */}
             <button
               onClick={handleDashboardNavigation}
-              className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded"
+              className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
             >
-              <Home size={18} /> Dashboard
+              <Home size={20} className="text-gray-500" />
+              <span className="font-medium">Dashboard</span>
             </button>
+
+            {/* Portfolio Section */}
+            {(isAdmin || isHR || isTrainer) && (
+              <>
+                <div className="text-xs font-semibold text-gray-500 px-4 py-2 mt-2">
+                  PORTFOLIO
+                </div>
+                {isTrainer && (
+                  <button
+                    onClick={() => handleNavigation("/trainer/portfolio")}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    <FolderGit2 size={20} className="text-gray-500" />
+                    <span className="font-medium">My Portfolio</span>
+                  </button>
+                )}
+                {(isAdmin || isHR) && (
+                  <>
+                    <button
+                      onClick={() => handleNavigation("/admin/portfolio")}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                    >
+                      <FolderGit2 size={20} className="text-gray-500" />
+                      <span className="font-medium">All Portfolios</span>
+                    </button>
+                    <button
+                      onClick={() => handleNavigation("/admin/portfolio?tab=qualifications")}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                    >
+                      <Award size={20} className="text-gray-500" />
+                      <span className="font-medium">Qualifications</span>
+                    </button>
+                    <button
+                      onClick={() => handleNavigation("/admin/portfolio?tab=projects")}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                    >
+                      <FolderGit2 size={20} className="text-gray-500" />
+                      <span className="font-medium">Projects</span>
+                    </button>
+                    <button
+                      onClick={() => handleNavigation("/admin/portfolio?tab=placement")}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                    >
+                      <TrendingUp size={20} className="text-gray-500" />
+                      <span className="font-medium">Placement Records</span>
+                    </button>
+                  </>
+                )}
+              </>
+            )}
 
             {/* Admin - Create HR */}
             {isAdmin && (
               <button
                 onClick={() => handleNavigation("/admin/hr/create")}
-                className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded"
+                className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
               >
-                <Shield size={18} /> Create HR/Admin
+                <Shield size={20} className="text-gray-500" />
+                <span className="font-medium">Create HR/Admin</span>
               </button>
             )}
 
@@ -403,15 +500,17 @@ export default function Navbar() {
               <>
                 <button
                   onClick={() => handleNavigation("/hr/leaves/my-leaves")}
-                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded"
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <FileText size={18} /> My Leave Requests
+                  <FileText size={20} className="text-gray-500" />
+                  <span className="font-medium">My Leave Requests</span>
                 </button>
                 <button
                   onClick={() => handleNavigation("/hr/apply-leave")}
-                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded"
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <Calendar size={18} /> Apply for Leave
+                  <Calendar size={20} className="text-gray-500" />
+                  <span className="font-medium">Apply for Leave</span>
                 </button>
               </>
             )}
@@ -419,136 +518,158 @@ export default function Navbar() {
             {/* Admin/HR - Trainer Management */}
             {(isAdmin || isHR) && (
               <>
-                <div className="border-t pt-2">
-                  <div className="text-xs font-semibold text-gray-500 px-4 py-1">
-                    TRAINER MANAGEMENT
-                  </div>
-                  <button
-                    onClick={() => handleNavigation("/admin/trainers")}
-                    className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
-                  >
-                    <Users size={18} /> All Trainers
-                  </button>
-                  <button
-                    onClick={() => handleNavigation("/admin/trainers/create")}
-                    className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
-                  >
-                    <User size={18} /> Create Trainer
-                  </button>
-                  <button
-                    onClick={() => handleNavigation("/admin/clocked-in")}
-                    className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
-                  >
-                    <Clock size={18} /> Currently Clocked In
-                  </button>
-                  <button
-                    onClick={() => handleNavigation("/admin/attendance")}
-                    className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
-                  >
-                    <Clock size={18} /> Attendance Reports
-                  </button>
+                <div className="text-xs font-semibold text-gray-500 px-4 py-2 mt-2">
+                  TRAINER MANAGEMENT
                 </div>
+                <button
+                  onClick={() => handleNavigation("/admin/trainers")}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <Users size={20} className="text-gray-500" />
+                  <span className="font-medium">All Trainers</span>
+                </button>
+                <button
+                  onClick={() => handleNavigation("/admin/trainers/create")}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <User size={20} className="text-gray-500" />
+                  <span className="font-medium">Create Trainer</span>
+                </button>
+                <button
+                  onClick={() => handleNavigation("/admin/clocked-in")}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <Clock size={20} className="text-gray-500" />
+                  <span className="font-medium">Currently Clocked In</span>
+                </button>
+                <button
+                  onClick={() => handleNavigation("/admin/attendance")}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <Clock size={20} className="text-gray-500" />
+                  <span className="font-medium">Attendance Reports</span>
+                </button>
               </>
             )}
 
             {/* Admin - HR Leave Approvals */}
             {isAdmin && (
-              <div className="border-t pt-2">
-                <div className="text-xs font-semibold text-gray-500 px-4 py-1">
+              <>
+                <div className="text-xs font-semibold text-gray-500 px-4 py-2 mt-2">
                   HR MANAGEMENT
                 </div>
                 <button
                   onClick={() => handleNavigation("/admin/leaves/hr-approvals")}
-                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left bg-purple-50 text-purple-700"
+                  className="flex items-center gap-3 w-full px-4 py-3 bg-purple-50 text-purple-700 rounded-lg transition-colors"
                 >
-                  <Briefcase size={18} /> HR Leave Approvals
-                  <span className="ml-auto px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">
+                  <Briefcase size={20} className="text-purple-500" />
+                  <span className="font-medium">HR Leave Approvals</span>
+                  <span className="ml-auto px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
                     Pending
                   </span>
                 </button>
-              </div>
+              </>
             )}
 
             {/* Admin/HR - Trainer Leaves */}
             {(isAdmin || isHR) && (
-              <div className="border-t pt-2">
-                <div className="text-xs font-semibold text-gray-500 px-4 py-1">
+              <>
+                <div className="text-xs font-semibold text-gray-500 px-4 py-2 mt-2">
                   TRAINER LEAVES
                 </div>
                 <button
                   onClick={() => handleNavigation("/admin/leaves")}
-                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <FileText size={18} /> Leave Management
+                  <FileText size={20} className="text-gray-500" />
+                  <span className="font-medium">Leave Management</span>
                 </button>
                 <button
                   onClick={() => handleNavigation("/admin/leaves/reports")}
-                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <FileText size={18} /> Leave Reports
+                  <FileText size={20} className="text-gray-500" />
+                  <span className="font-medium">Leave Reports</span>
                 </button>
-              </div>
+              </>
             )}
 
             {/* Trainer - My Leaves */}
             {isTrainer && (
-              <div className="border-t pt-2">
-                <div className="text-xs font-semibold text-gray-500 px-4 py-1">
+              <>
+                <div className="text-xs font-semibold text-gray-500 px-4 py-2 mt-2">
                   MY LEAVES
                 </div>
                 <button
                   onClick={() => handleNavigation("/trainer/apply-leave")}
-                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <Calendar size={18} /> Apply for Leave
+                  <Calendar size={20} className="text-gray-500" />
+                  <span className="font-medium">Apply for Leave</span>
                 </button>
                 <button
                   onClick={() => handleNavigation("/trainer/leaves/reports")}
-                  className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
+                  className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <FileText size={18} /> Leave History
+                  <FileText size={20} className="text-gray-500" />
+                  <span className="font-medium">Leave History</span>
                 </button>
-              </div>
+              </>
             )}
 
-            {/* Profile & Settings */}
-            <div className="border-t pt-2">
-              <div className="text-xs font-semibold text-gray-500 px-4 py-1">
+            {/* Trainer - Attendance History */}
+            {isTrainer && (
+              <button
+                onClick={() => handleNavigation("/trainer/attendance/history")}
+                className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                <Clock size={20} className="text-gray-500" />
+                <span className="font-medium">Attendance History</span>
+              </button>
+            )}
+
+            {/* Account Section - Merged Profile & Logout */}
+            <div className="border-t border-gray-200 mt-4 pt-4">
+              <div className="text-xs font-semibold text-gray-500 px-4 py-2">
                 ACCOUNT
               </div>
+              
+              {/* Profile */}
               <button
                 onClick={() => 
                   isAdmin || isHR
                     ? handleNavigation("/admin/profile") 
                     : handleNavigation("/trainer/profile")
                 }
-                className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
+                className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
               >
-                <UserCog size={18} /> My Profile
+                <UserCog size={20} className="text-gray-500" />
+                <span className="font-medium">My Profile</span>
               </button>
-              {/* <button
+              
+              {/* Change Password */}
+              <button
                 onClick={() => handleNavigation("/change-password")}
-                className="flex gap-2 items-center hover:bg-gray-100 px-4 py-2 rounded w-full text-left"
+                className="flex items-center gap-3 w-full px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
               >
-                <Settings size={18} /> Change Password
-              </button> */}
-            </div>
-
-            {/* User Info & Logout */}
-            <div className="border-t pt-3">
-              <div className="flex items-center justify-between px-4 py-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                    <User size={16} className="text-white" />
+                <Settings size={20} className="text-gray-500" />
+                <span className="font-medium">Change Password</span>
+              </button>
+              
+              {/* User Info & Logout */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <User size={20} className="text-white" />
                   </div>
-                  <div>
-                    <div className="text-sm font-medium text-gray-800">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-800 truncate">
                       {user?.profile?.firstName} {user?.profile?.lastName}
                     </div>
                     <div className="text-xs text-gray-500 capitalize flex items-center gap-1">
                       {user?.role?.toLowerCase()}
                       {isHR && (
-                        <span className="text-purple-500 flex items-center">
+                        <span className="text-purple-500 flex items-center gap-0.5">
                           <Infinity size={12} />
                           unlimited
                         </span>
@@ -556,13 +677,14 @@ export default function Navbar() {
                     </div>
                   </div>
                 </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-1"
+                >
+                  <LogOut size={20} />
+                  <span className="font-medium">Logout</span>
+                </button>
               </div>
-              <button
-                onClick={handleLogout}
-                className="flex gap-2 items-center text-red-500 hover:bg-red-50 px-4 py-2 rounded w-full mt-2"
-              >
-                <LogOut size={18} /> Logout
-              </button>
             </div>
           </div>
         </div>
