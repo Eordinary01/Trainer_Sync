@@ -28,8 +28,7 @@ export default function HRLeaveSection() {
       api.get('/leaves/hr/balance')
     ]);
     
-    // Most likely your API response is wrapped in axios
-    // Try both common patterns
+    
     const leavesData = historyRes.data?.data || historyRes.data || [];
     setMyLeaves(Array.isArray(leavesData) ? leavesData : []);
     

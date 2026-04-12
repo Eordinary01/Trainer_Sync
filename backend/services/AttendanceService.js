@@ -303,33 +303,39 @@ export class AttendanceService {
 
   async getWeeklyReport(trainerId) {
     const endDate = new Date();
-    const startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+    // Fix: Subtract 6 days to get 7 days total (today + previous 6 days = 7 days)
+    const startDate = new Date(endDate.getTime() - 6 * 24 * 60 * 60 * 1000);
+    
+    // Optional: Set times to ensure full day coverage
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
 
     const attendance = await Attendance.find({
-      trainerId,
-      date: { $gte: startDate, $lte: endDate },
-      status: ATTENDANCE_STATUS.CLOCKED_OUT,
+        trainerId,
+        date: { $gte: startDate, $lte: endDate },
+        status: ATTENDANCE_STATUS.CLOCKED_OUT,
     }).sort({ date: -1 });
 
     const dailyHours = {};
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+    // Initialize all 7 days
     for (let i = 0; i < 7; i++) {
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + i);
-      const dayName = dayNames[d.getDay()];
-      dailyHours[`${dayName} ${DateUtils.formatDate(d, 'DD-MM')}`] = 0;
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
+        const dayName = dayNames[d.getDay()];
+        dailyHours[`${dayName} ${DateUtils.formatDate(d, 'YYYY-MM-DD')}`] = 0;
     }
 
     attendance.forEach(record => {
-      const d = new Date(record.date);
-      const dayName = dayNames[d.getDay()];
-      const label = `${dayName} ${DateUtils.formatDate(record.date, 'DD-MM')}`;
-      dailyHours[label] = record.totalWorkingHours || 0;
+        const d = new Date(record.date);
+        const dayName = dayNames[d.getDay()];
+        const label = `${dayName} ${DateUtils.formatDate(record.date, 'YYYY-MM-DD')}`;
+        dailyHours[label] = record.totalWorkingHours || 0;
     });
 
     return dailyHours;
-  }
+}
 
   async getMonthlyReport(trainerId) {
     const now = new Date();

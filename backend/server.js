@@ -3,38 +3,57 @@ import { envConfig } from './config/environment.js';
 import EventEmitter from 'events';
 import http from 'http';
 import { socketService } from './services/SocketService.js';
+import { CronService } from './services/CronServices.js';
+import os from 'os'; // Add this import
 
 // Fix for MaxListenersExceededWarning
 EventEmitter.defaultMaxListeners = 20;
 
-// 🔍 DEBUG LOGS — SEE WHAT IS COMING FROM envConfig
-// console.log("========= ENVIRONMENT CONFIG LOADED =========");
-// console.log("envConfig:", envConfig);
-// console.log("PORT received:", envConfig.PORT);
-// console.log("NODE_ENV received:", envConfig.NODE_ENV);
-// console.log("JWT_SECRET received:", envConfig.JWT_SECRET ? "Loaded ✓" : "❌ NOT LOADED (undefined)");
-// console.log("=============================================\n");
+// Helper function to get local IP address
+const getLocalIpAddress = () => {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Skip internal and non-IPv4 addresses
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+};
 
-// Extract PORT AFTER logs
+// Extract PORT
 const PORT = process.env.PORT || envConfig.PORT || 8890;
+const HOST = '0.0.0.0'; // 👈 THIS IS CRITICAL - binds to all network interfaces
 
+// Get local IP for display
+const localIp = getLocalIpAddress();
 
-// ✅ Create HTTP server for Socket.IO
+// Create HTTP server for Socket.IO
 const server = http.createServer(app);
 
-// ✅ Initialize Socket.IO
+// Initialize Socket.IO
 socketService.initialize(server);
 
-// ✅ Start server
-server.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-  // console.log(`🌍 Environment: ${envConfig.NODE_ENV}`);
-  console.log(`🔌 Socket.IO server initialized`);
+const cronService = new CronService();
+cronService.setupCronJobs();
+
+// ✅ Start server with HOST binding
+server.listen(PORT, HOST, () => {
+  console.log(`
+  🚀 Server is running!
+  📡 Local: http://localhost:${PORT}
+  🌐 Network: http://${localIp}:${PORT}
+  🔌 Socket.IO: ws://${localIp}:${PORT}
+  `);
+  console.log(`📱 Use this IP in your React Native app: ${localIp}`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
+  cronService.stopHealthCheckCron();
   server.close(() => {
     console.log('Server closed');
     process.exit(0);
