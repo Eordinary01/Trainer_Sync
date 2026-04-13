@@ -54,6 +54,8 @@ const allowedOrigins = [
   'http://localhost:8081',
   `http://${localIp}:8081`, // Dynamic IP for React Native
   'http://192.168.1.7:8081',
+  'http://localhost:5173',
+    'https://trainer-sync-tau.vercel.app'
   
   // Add more origins as needed
 ];
