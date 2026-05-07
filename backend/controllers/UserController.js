@@ -154,7 +154,7 @@ export class UserController {
     }
   }
 
-  async updateProfile(req, res, next) {
+ async updateProfile(req, res, next) {
   try {
     // Get user ID from params (admin editing) or from authenticated user
     const targetUserId = req.params.userId || req.user.userId;
@@ -201,14 +201,11 @@ export class UserController {
 
     // Fields that ONLY ADMIN/HR can edit (full portfolio control)
     const adminOnlyFields = [
-      // Professional info
       'department',
       'designation',
       'reportingManager',
       'status',
       'joiningDate',
-      
-      // Client info
       'client',
       'client.name',
       'client.address',
@@ -217,31 +214,20 @@ export class UserController {
       'client.city',
       'client.state',
       'client.zipCode',
-      
-      // University info (FULL control)
       'university',
       'university.name',
       'university.enrollmentId',
       'university.joinDate',
       'university.completionDate',
       'university.status',
-      
-      // Academic portfolio (TRAINERS CANNOT EDIT THESE)
       'subjects',
       'semesterActivities',
       'projects',
-      'qualifications',
-      'experience',
-      'certifications',
-      
-      // Placement records
       'placementRecord',
-      
-      // Subordinates
       'subordinates'
     ];
 
-    // Fields that TRAINERS can edit (basic personal info ONLY)
+    // Fields that TRAINERS can edit (basic info + portfolio)
     const trainerEditableFields = [
       'firstName',
       'lastName',
@@ -254,65 +240,79 @@ export class UserController {
       'zipCode',
       'country',
       'bio',
-      'skills',  // Skills array - ENTIRE array is allowed
-      'avatar'
+      'skills',
+      'avatar',
+      'qualifications',
+      'experience',
+      'certifications'
     ];
 
     // ============================================
     // VALIDATE RESTRICTED FIELDS
     // ============================================
     
-    const updateData = { profile: {} };
     const errors = [];
 
-    // Check for system-managed fields (no one can edit)
-    const checkSystemFields = (obj, path = '') => {
+    // Helper function to check for restricted fields
+    const checkRestrictedFields = (obj, path = '') => {
       if (!obj || typeof obj !== 'object') return;
       
-      Object.keys(obj).forEach(key => {
+      for (const key of Object.keys(obj)) {
         const value = obj[key];
         const currentPath = path ? `${path}.${key}` : key;
         
+        // Skip system-managed fields (no one can edit)
         if (systemManagedFields.includes(currentPath)) {
           errors.push(`Cannot modify system-managed field: ${currentPath}`);
-        } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-          checkSystemFields(value, currentPath);
+          continue;
         }
-      });
-    };
-    checkSystemFields(profile);
-
-    // For regular users (trainers), check against admin-only fields
-    if (!isAdminOrHR) {
-      const checkAdminOnlyFields = (obj, path = '') => {
-        if (!obj || typeof obj !== 'object') return;
         
-        Object.keys(obj).forEach(key => {
-          const value = obj[key];
-          const currentPath = path ? `${path}.${key}` : key;
+        // For non-admin users, check admin-only fields
+        if (!isAdminOrHR) {
+          // Skip portfolio fields (they are allowed for trainers)
+          const isPortfolioField = currentPath === 'qualifications' || 
+                                   currentPath === 'experience' || 
+                                   currentPath === 'certifications' ||
+                                   currentPath.startsWith('qualifications.') ||
+                                   currentPath.startsWith('experience.') ||
+                                   currentPath.startsWith('certifications.');
           
-          // Check if this exact path is admin-only
+          if (isPortfolioField) {
+            continue; // Allow portfolio fields
+          }
+          
+          // Check if this is an admin-only field
           if (adminOnlyFields.includes(currentPath)) {
             errors.push(`Cannot modify field: ${currentPath}. Only Admin/HR can update this.`);
+            continue;
           }
+          
           // Check if this path starts with any admin-only field
-          else if (adminOnlyFields.some(field => currentPath.startsWith(field + '.'))) {
+          let isAdminOnlyPath = false;
+          for (const field of adminOnlyFields) {
+            if (currentPath.startsWith(field + '.')) {
+              errors.push(`Cannot modify field: ${currentPath}. Only Admin/HR can update this.`);
+              isAdminOnlyPath = true;
+              break;
+            }
+          }
+          if (isAdminOnlyPath) continue;
+          
+          // Check if top-level key is allowed for trainers
+          if (!trainerEditableFields.includes(key)) {
             errors.push(`Cannot modify field: ${currentPath}. Only Admin/HR can update this.`);
+            continue;
           }
-          // Special case: skills array elements should be allowed
-          else if (currentPath.startsWith('skills.') && !isNaN(key)) {
-            // This is a skill array element - ALLOWED (trainers can edit skills)
-            return;
-          }
-          // Recursively check nested objects (but skip arrays)
-          else if (value && typeof value === 'object' && !Array.isArray(value)) {
-            checkAdminOnlyFields(value, currentPath);
-          }
-        });
-      };
-      
-      checkAdminOnlyFields(profile);
-    }
+        }
+        
+        // Recursively check nested objects
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          checkRestrictedFields(value, currentPath);
+        }
+      }
+    };
+
+    checkRestrictedFields(profile);
 
     // If there are validation errors, return them
     if (errors.length > 0) {
@@ -327,25 +327,53 @@ export class UserController {
     // BUILD UPDATE DATA BASED ON ROLE
     // ============================================
     
+    const updateData = { profile: {} };
+    
     const buildUpdateData = (obj, target, path = '') => {
       if (!obj || typeof obj !== 'object') return;
       
-      Object.keys(obj).forEach(key => {
+      for (const key of Object.keys(obj)) {
         const value = obj[key];
         const currentPath = path ? `${path}.${key}` : key;
         
-        if (value === undefined) return;
+        if (value === undefined) continue;
         
         // Skip system-managed fields
-        if (systemManagedFields.includes(currentPath)) return;
+        if (systemManagedFields.includes(currentPath)) continue;
         
         // For non-admin users, skip admin-only fields
         if (!isAdminOrHR) {
-          // Check if this exact path is admin-only
-          if (adminOnlyFields.includes(currentPath)) return;
+          // Allow portfolio fields
+          const isPortfolioField = currentPath === 'qualifications' || 
+                                   currentPath === 'experience' || 
+                                   currentPath === 'certifications' ||
+                                   currentPath.startsWith('qualifications.') ||
+                                   currentPath.startsWith('experience.') ||
+                                   currentPath.startsWith('certifications.');
           
+          if (isPortfolioField) {
+            // Allow portfolio fields
+          }
+          // Check if this is an admin-only field
+          else if (adminOnlyFields.includes(currentPath)) {
+            continue;
+          }
           // Check if this path starts with any admin-only field
-          if (adminOnlyFields.some(field => currentPath.startsWith(field + '.'))) return;
+          else {
+            let isAdminOnlyPath = false;
+            for (const field of adminOnlyFields) {
+              if (currentPath.startsWith(field + '.')) {
+                isAdminOnlyPath = true;
+                break;
+              }
+            }
+            if (isAdminOnlyPath) continue;
+            
+            // Check if top-level key is allowed for trainers
+            if (!trainerEditableFields.includes(key)) {
+              continue;
+            }
+          }
         }
         
         // Handle nested objects
@@ -353,33 +381,37 @@ export class UserController {
           if (!target[key]) target[key] = {};
           buildUpdateData(value, target[key], currentPath);
         } 
-        // Handle arrays
+        // Handle arrays (qualifications, experience, certifications, skills)
         else if (Array.isArray(value)) {
-          // For admin, allow full array updates
-          if (isAdminOrHR) {
+          // For trainers, allow specific arrays
+          if (!isAdminOrHR) {
+            if (key === 'qualifications' || key === 'experience' || key === 'certifications') {
+              if (value.length > 50) {
+                errors.push(`${key} cannot have more than 50 items`);
+                continue;
+              }
+              target[key] = value;
+            } else if (key === 'skills') {
+              const cleanedSkills = [...new Set(
+                value
+                  .map(skill => skill?.toString().trim())
+                  .filter(skill => skill && skill.length > 0)
+                  .slice(0, 20)
+              )];
+              target[key] = cleanedSkills;
+            }
+          } else {
+            // Admin can update any array
             target[key] = value;
           }
-          // For trainers, only allow skills array
-          else if (key === 'skills') {
-            // Clean and validate skills
-            const cleanedSkills = [...new Set(
-              value
-                .map(skill => skill?.toString().trim())
-                .filter(skill => skill && skill.length > 0)
-                .slice(0, 20)
-            )];
-            target[key] = cleanedSkills;
-          }
-          // For other arrays, trainers cannot update them
         }
         // Handle primitive values
         else {
           target[key] = value;
         }
-      });
+      }
     };
 
-    // Build the update data
     buildUpdateData(profile, updateData.profile);
 
     // ============================================

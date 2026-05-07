@@ -109,105 +109,33 @@ export class UserService {
       user.profile = {};
     }
 
-    // Basic fields (existing)
-    if (updateData.profile.firstName !== undefined) {
-      user.profile.firstName = updateData.profile.firstName;
+    // Basic personal fields
+    const basicFields = [
+      'firstName', 'lastName', 'phone', 'dateOfBirth', 'gender',
+      'address', 'city', 'state', 'zipCode', 'country', 'bio', 'avatar'
+    ];
+    
+    for (const field of basicFields) {
+      if (updateData.profile[field] !== undefined) {
+        user.profile[field] = updateData.profile[field];
+      }
     }
-    if (updateData.profile.lastName !== undefined) {
-      user.profile.lastName = updateData.profile.lastName;
-    }
-    if (updateData.profile.phone !== undefined) {
-      user.profile.phone = updateData.profile.phone;
-    }
-    if (updateData.profile.dateOfBirth !== undefined) {
-      user.profile.dateOfBirth = updateData.profile.dateOfBirth;
-    }
-    if (updateData.profile.gender !== undefined) {
-      user.profile.gender = updateData.profile.gender;
-    }
-    if (updateData.profile.address !== undefined) {
-      user.profile.address = updateData.profile.address;
-    }
-    if (updateData.profile.city !== undefined) {
-      user.profile.city = updateData.profile.city;
-    }
-    if (updateData.profile.state !== undefined) {
-      user.profile.state = updateData.profile.state;
-    }
-    if (updateData.profile.zipCode !== undefined) {
-      user.profile.zipCode = updateData.profile.zipCode;
-    }
-    if (updateData.profile.country !== undefined) {
-      user.profile.country = updateData.profile.country;
-    }
-    if (updateData.profile.bio !== undefined) {
-      user.profile.bio = updateData.profile.bio;
-    }
-    if (updateData.profile.avatar !== undefined) {
-      user.profile.avatar = updateData.profile.avatar;
-    }
+
+    // Skills
     if (updateData.profile.skills !== undefined) {
       if (!Array.isArray(updateData.profile.skills)) {
         throw new ValidationError("Skills must be an array");
       }
-      const cleanedSkills = [
-        ...new Set(
-          updateData.profile.skills
-            .map((skill) => skill?.toString().trim())
-            .filter((skill) => skill && skill.length > 0)
-            .slice(0, 20),
-        ),
-      ];
+      const cleanedSkills = [...new Set(
+        updateData.profile.skills
+          .map((skill) => skill?.toString().trim())
+          .filter((skill) => skill && skill.length > 0)
+          .slice(0, 20)
+      )];
       user.profile.skills = cleanedSkills;
     }
 
-    // Professional fields (should only be updated by Admin/HR)
-    if (updateData.profile.department !== undefined) {
-      user.profile.department = updateData.profile.department;
-    }
-    if (updateData.profile.designation !== undefined) {
-      user.profile.designation = updateData.profile.designation;
-    }
-    if (updateData.profile.reportingManager !== undefined) {
-      user.profile.reportingManager = updateData.profile.reportingManager;
-    }
-    if (updateData.profile.joiningDate !== undefined) {
-      user.profile.joiningDate = updateData.profile.joiningDate;
-    }
-
-    // ✅ University info
-    if (updateData.profile.university !== undefined) {
-      user.profile.university = {
-        ...user.profile.university,
-        ...updateData.profile.university,
-      };
-    }
-
-    // ✅ Subjects (full array replacement)
-    if (updateData.profile.subjects !== undefined) {
-      if (!Array.isArray(updateData.profile.subjects)) {
-        throw new ValidationError("Subjects must be an array");
-      }
-      user.profile.subjects = updateData.profile.subjects;
-    }
-
-    // ✅ Semester activities
-    if (updateData.profile.semesterActivities !== undefined) {
-      if (!Array.isArray(updateData.profile.semesterActivities)) {
-        throw new ValidationError("Semester activities must be an array");
-      }
-      user.profile.semesterActivities = updateData.profile.semesterActivities;
-    }
-
-    // ✅ Projects
-    if (updateData.profile.projects !== undefined) {
-      if (!Array.isArray(updateData.profile.projects)) {
-        throw new ValidationError("Projects must be an array");
-      }
-      user.profile.projects = updateData.profile.projects;
-    }
-
-    // ✅ Qualifications
+    // Qualifications
     if (updateData.profile.qualifications !== undefined) {
       if (!Array.isArray(updateData.profile.qualifications)) {
         throw new ValidationError("Qualifications must be an array");
@@ -215,7 +143,7 @@ export class UserService {
       user.profile.qualifications = updateData.profile.qualifications;
     }
 
-    // ✅ Experience
+    // Experience
     if (updateData.profile.experience !== undefined) {
       if (!Array.isArray(updateData.profile.experience)) {
         throw new ValidationError("Experience must be an array");
@@ -223,7 +151,7 @@ export class UserService {
       user.profile.experience = updateData.profile.experience;
     }
 
-    // ✅ Certifications
+    // Certifications
     if (updateData.profile.certifications !== undefined) {
       if (!Array.isArray(updateData.profile.certifications)) {
         throw new ValidationError("Certifications must be an array");
@@ -231,7 +159,38 @@ export class UserService {
       user.profile.certifications = updateData.profile.certifications;
     }
 
-    // ✅ Placement record
+    // Professional fields (Admin/HR only)
+    const professionalFields = ['department', 'designation', 'reportingManager', 'joiningDate'];
+    for (const field of professionalFields) {
+      if (updateData.profile[field] !== undefined) {
+        user.profile[field] = updateData.profile[field];
+      }
+    }
+
+    // University info
+    if (updateData.profile.university !== undefined) {
+      user.profile.university = {
+        ...user.profile.university,
+        ...updateData.profile.university,
+      };
+    }
+
+    // Subjects (Admin/HR only)
+    if (updateData.profile.subjects !== undefined) {
+      user.profile.subjects = updateData.profile.subjects;
+    }
+
+    // Semester activities (Admin/HR only)
+    if (updateData.profile.semesterActivities !== undefined) {
+      user.profile.semesterActivities = updateData.profile.semesterActivities;
+    }
+
+    // Projects (Admin/HR only)
+    if (updateData.profile.projects !== undefined) {
+      user.profile.projects = updateData.profile.projects;
+    }
+
+    // Placement record (Admin/HR only)
     if (updateData.profile.placementRecord !== undefined) {
       user.profile.placementRecord = {
         ...user.profile.placementRecord,
@@ -240,7 +199,7 @@ export class UserService {
       };
     }
 
-    // ✅ Client info
+    // Client info (Admin/HR only)
     if (updateData.profile.client !== undefined) {
       user.profile.client = {
         ...user.profile.client,
@@ -251,14 +210,13 @@ export class UserService {
 
   // Set updated timestamp
   user.updatedAt = new Date();
+  user.markModified('profile');
 
   await user.save();
 
   // Return updated user without sensitive data
   const updatedUser = await User.findById(userId)
-    .select(
-      "-password -passwordResetToken -passwordResetExpire -loginAttempts -lockUntil",
-    )
+    .select("-password -passwordResetToken -passwordResetExpire -loginAttempts -lockUntil")
     .lean();
 
   return updatedUser;
