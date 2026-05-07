@@ -112,6 +112,19 @@ export class UserController {
     }
   }
 
+  async checkTrainerIdExists(req,res,next){
+
+    const {employeeId} = req.params;
+
+    const exists = await User.findOne({'profile.employeeId': employeeId});
+
+    return res.json({
+      available: !exists,
+      message: exists ? "Employee ID is already taken" : "Employee ID is available"
+    })
+
+  };
+
   async getProfile(req, res, next) {
     try {
       const userId = req.params.id;

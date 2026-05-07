@@ -389,6 +389,13 @@ usersRouter.patch(
 
 // Get all trainers (with pagination)
 usersRouter.get(
+  "/check-id/:employeeId",
+  authenticate,
+  authorize("ADMIN", "HR"),
+  (req,res,next)=>userController.checkTrainerIdExists(req,res,next),
+);
+
+usersRouter.get(
   "/",
   authenticate,
   authorize("ADMIN", "HR"),

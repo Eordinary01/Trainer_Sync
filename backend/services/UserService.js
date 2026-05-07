@@ -30,6 +30,15 @@ export class UserService {
       throw new ConflictError("Email already exists");
     }
 
+    const existingTrainerId= await User.findOne({trainerId: trainerData.trainerId});
+
+    if(existingTrainerId)
+    {
+      throw new ConflictError("Trainer ID already exists");
+    }
+
+
+
     // ✅ FIXED: Preserve the arrays from frontend, only initialize if not present
     const trainer = new User({
       ...trainerData,
