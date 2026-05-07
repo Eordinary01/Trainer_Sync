@@ -1,6 +1,7 @@
 import { UserService } from "../services/UserService.js";
 import { EmailService } from "../services/EmailService.js";
 import { Validators } from "../utils/validators.js";
+import User from "../models/User.model.js";
 
 // ✅ Removed duplicate instantiation here
 const emailService = new EmailService();
