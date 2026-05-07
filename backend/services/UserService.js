@@ -30,14 +30,14 @@ export class UserService {
       throw new ConflictError("Email already exists");
     }
 
-    const existingTrainerId= await User.findOne({trainerId: trainerData.trainerId});
+    // ✅ FIXED: Query using the correct field path 'profile.employeeId'
+    const existingTrainerId = await User.findOne({ 
+      'profile.employeeId': trainerData.profile?.employeeId 
+    });
 
-    if(existingTrainerId)
-    {
-      throw new ConflictError("Trainer ID already exists");
+    if (existingTrainerId) {
+      throw new ConflictError("Employee ID already exists");
     }
-
-
 
     // ✅ FIXED: Preserve the arrays from frontend, only initialize if not present
     const trainer = new User({
